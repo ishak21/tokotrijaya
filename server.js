@@ -671,6 +671,8 @@ app.post('/api/orders', (req, res) => {
 
     // Metode yang statusnya baru "lunas" setelah dikonfirmasi admin secara manual
     const payment_status = 'pending';
+    // COD sudah merupakan konfirmasi order; transfer/e-wallet menunggu verifikasi pembayaran.
+    const initial_status = payment_method === 'cod' ? 'confirmed' : 'pending';
 
     const insItem = db.prepare('INSERT INTO order_items (order_id,product_id,product_name,product_image,price,quantity,subtotal,cost_price) VALUES (?,?,?,?,?,?,?,?)');
     const updStock = db.prepare('UPDATE products SET stock=MAX(0,stock-?) WHERE id=?');
@@ -690,8 +692,8 @@ app.post('/api/orders', (req, res) => {
         customerId = r2.lastInsertRowid;
       }
 
-      const r = db.prepare('INSERT INTO orders (invoice,customer_name,customer_phone,customer_email,customer_address,customer_city,customer_province,customer_postal,payment_method,payment_detail,payment_status,customer_id,shipping_method,shipping_cost,subtotal,ppn_amount,ppn_rate,total,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        .run(inv, customer_name, customer_phone, customer_email||'', customer_address, customer_city||'', customer_province||'', customer_postal||'', payment_method||'', payment_detail||'', payment_status, customerId, shipping_method||'', +shipping_cost||0, subtotal, ppnAmt, ppnRate, total, notes||'');
+      const r = db.prepare('INSERT INTO orders (invoice,customer_name,customer_phone,customer_email,customer_address,customer_city,customer_province,customer_postal,payment_method,payment_detail,payment_status,customer_id,status,shipping_method,shipping_cost,subtotal,ppn_amount,ppn_rate,total,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        .run(inv, customer_name, customer_phone, customer_email||'', customer_address, customer_city||'', customer_province||'', customer_postal||'', payment_method||'', payment_detail||'', payment_status, customerId, initial_status, shipping_method||'', +shipping_cost||0, subtotal, ppnAmt, ppnRate, total, notes||'');
       const orderId = r.lastInsertRowid;
       processed.forEach(i => {
         insItem.run(orderId, i.product_id, i.product_name, i.product_image, i.price, i.quantity, i.subtotal, i.cost_price);
@@ -731,10 +733,11 @@ app.get('/api/admin/orders', requireAdmin, (req, res) => {
 app.put('/api/admin/orders/:id/payment-status', requireAdmin, (req, res) => {
   const { payment_status } = req.body;
   if (!['pending','lunas'].includes(payment_status)) return res.status(400).json({ error: 'Status pembayaran tidak valid' });
-  const o = db.prepare('SELECT id FROM orders WHERE id=?').get(+req.params.id);
+  const o = db.prepare('SELECT id,status FROM orders WHERE id=?').get(+req.params.id);
   if (!o) return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
-  db.prepare('UPDATE orders SET payment_status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(payment_status, o.id);
-  res.json({ success: true });
+  const nextStatus = payment_status === 'lunas' && o.status === 'pending' ? 'confirmed' : o.status;
+  db.prepare('UPDATE orders SET payment_status=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(payment_status, nextStatus, o.id);
+  res.json({ success: true, status: nextStatus });
 });
 
 // Hapus satu transaksi/pesanan dari riwayat

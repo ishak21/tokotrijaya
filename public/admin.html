@@ -1630,7 +1630,9 @@ async function loadOrders() {
   `).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted)">Belum ada pesanan</td></tr>';
 }
 async function updateOrderStatus(id, status) {
-  await fetch(`/api/admin/orders/${id}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  const res = await fetch(`/api/admin/orders/${id}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  const d = await res.json();
+  if (!res.ok || !d.success) { alert(d.error || 'Status pesanan gagal diperbarui'); loadOrders(); return; }
   loadOrders();
 }
 async function viewOrder(id) {
