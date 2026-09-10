@@ -100,6 +100,7 @@ input,select,textarea{font-family:var(--font-b)}
 
 /* Cards */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px}
+@media(max-width:640px){.stats-grid{grid-template-columns:repeat(3,1fr);gap:10px}}
 .stat-card{background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);display:flex;gap:16px;align-items:center;border:1px solid var(--border)}
 .stat-icon{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font-size:1.1rem;flex-shrink:0}
 .stat-icon.green{background:var(--primary-light);color:var(--primary)}
@@ -188,6 +189,14 @@ tr:hover td{background:rgba(15,42,37,.015)}
   .sidebar{width:60px}.sidebar-logo h2,.sidebar-logo small,.nav-item span{display:none}
   .nav-item{justify-content:center;padding:14px 0}.nav-item i{margin:0}
   .form-row,.form-row-3{grid-template-columns:1fr}
+}
+/* Compact 3-across stats on phones (desktop-like layout) */
+@media(max-width:640px){
+  .stat-card{flex-direction:column;align-items:flex-start;gap:8px;padding:12px}
+  .stat-icon{width:36px;height:36px;border-radius:10px;font-size:.95rem}
+  .stat-label{font-size:.68rem}
+  .stat-value{font-size:1rem}
+  .stat-sub{font-size:.65rem}
 }
 
 .hidden{display:none!important}
