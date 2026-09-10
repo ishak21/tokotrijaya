@@ -703,6 +703,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
           </div>
           <input type="file" id="prodImageUpload" accept="image/*" style="display:none" onchange="uploadProductImage(this)">
           <input type="hidden" id="prodImage">
+          <div id="prodUploadStatus" class="stat-sub hidden" style="margin-top:6px;color:#0d9488"></div>
         </div>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
           <button type="button" class="btn btn-outline" onclick="closeProdModal()">Batal</button>
@@ -1386,6 +1387,9 @@ function editProduct(id) {
 function closeProdModal() { document.getElementById('prodModal').classList.remove('open'); }
 async function saveProduct(e) {
   e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn && btn.disabled) return;
+  if (_prodUploadPending) { alert('Mohon tunggu, gambar masih dalam proses unggah...'); return; }
   const id = document.getElementById('prodId').value;
   const body = {
     name: document.getElementById('prodName').value,
@@ -1400,9 +1404,14 @@ async function saveProduct(e) {
   };
   const url = id ? `/api/admin/products/${id}` : '/api/admin/products';
   const method = id ? 'PUT' : 'POST';
-  const res = await fetch(url, {method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const d = await res.json();
-  if (d.success) { closeProdModal(); prodCategoriesCache = null; loadAdminProducts(); } else alert(d.error);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
+  try {
+    const res = await fetch(url, {method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await res.json();
+    if (d.success) { closeProdModal(); prodCategoriesCache = null; loadAdminProducts(); } else alert(d.error);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Simpan'; }
+  }
 }
 async function deleteProduct(id) {
   if (!confirm('Hapus produk ini?')) return;
@@ -1439,15 +1448,32 @@ async function importProductsCsv(input) {
   }
 }
 
+let _prodUploadPending = false;
 async function uploadProductImage(input) {
-  if (!input.files[0]) return;
-  const fd = new FormData(); fd.append('file', input.files[0]);
-  const res = await fetch('/api/upload?type=products', {method:'POST',body:fd});
-  const d = await res.json();
-  if (d.success) {
-    document.getElementById('prodImage').value = d.url;
-    document.getElementById('prodPreview').src = d.url;
-    document.getElementById('prodPreview').classList.remove('hidden');
+  const file = input.files[0];
+  const statusEl = document.getElementById('prodUploadStatus');
+  if (!file) return;
+  try {
+    _prodUploadPending = true;
+    statusEl.textContent = '\u23f3 Mengunggah gambar, mohon tunggu...';
+    statusEl.classList.remove('hidden');
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch('/api/upload?type=products', {method:'POST',body:fd});
+    const d = await res.json();
+    if (d.success) {
+      document.getElementById('prodImage').value = d.url;
+      document.getElementById('prodPreview').src = d.url;
+      document.getElementById('prodPreview').classList.remove('hidden');
+      statusEl.textContent = '\u2705 Gambar berhasil diunggah';
+      setTimeout(()=>statusEl.classList.add('hidden'), 2500);
+    } else {
+      statusEl.textContent = '\u274c ' + (d.error || 'Gagal upload gambar');
+    }
+  } catch(err) {
+    statusEl.textContent = '\u274c Gagal upload gambar (cek koneksi internet)';
+  } finally {
+    _prodUploadPending = false;
+    input.value = '';
   }
 }
 
