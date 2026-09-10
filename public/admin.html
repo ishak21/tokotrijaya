@@ -773,7 +773,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
 <div class="modal-bg" id="orderDetailModal">
   <div class="modal-box" style="max-width:600px">
     <div class="modal-top">
-      <h3>Detail Pesanan</h3>
+      <h3>Detail Pesanan</h3><button class="btn btn-sm btn-primary" onclick="printOrderReceipt()"><i class="fas fa-print"></i> Cetak / PDF</button>
       <button class="close-m" onclick="document.getElementById('orderDetailModal').classList.remove('open')"><i class="fas fa-times"></i></button>
     </div>
     <div class="modal-content" id="orderDetailContent"></div>
@@ -1665,6 +1665,12 @@ async function viewOrder(id) {
     ${o.notes?`<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);font-size:.85rem"><strong>Catatan:</strong> ${o.notes}</div>`:''}
   `;
   document.getElementById('orderDetailModal').classList.add('open');
+  window.lastViewedOrder = o;
+}
+function printOrderReceipt() {
+  const o = window.lastViewedOrder;
+  if (!o) return alert('Detail pesanan belum dimuat.');
+  openPrintWindow('Nota Pembelian', `<div><strong>Invoice:</strong> ${escapeHtml(o.invoice)}<br><strong>Pelanggan:</strong> ${escapeHtml(o.customer_name)}<br><strong>Telepon:</strong> ${escapeHtml(o.customer_phone)}<br><strong>Alamat:</strong> ${escapeHtml(o.customer_address)}</div><table><thead><tr><th>Produk</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr></thead><tbody>${o.items.map(i=>`<tr><td>${escapeHtml(i.product_name)}</td><td>${i.quantity}</td><td>${fmt(i.price)}</td><td>${fmt(i.subtotal)}</td></tr>`).join('')}</tbody></table><div class="totals">Total: ${fmt(o.total)}</div>`, `Invoice ${o.invoice}`);
 }
 
 // Kasir & Pelanggan
@@ -1723,7 +1729,13 @@ async function loadPurchases() {
   `).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Belum ada pembelian. Klik "Buat Pembelian" untuk mencatat pembelian barang dari supplier.</td></tr>';
 }
 let poItemCount = 0;
-function openPurchaseModal() {
+let purchaseProducts = [];
+async function loadPurchaseProducts() {
+  const r = await fetch('/api/admin/products?limit=200&status=active&sort=name_asc');
+  const d = await r.json(); purchaseProducts = d.products || [];
+}
+async function openPurchaseModal() {
+  await loadPurchaseProducts();
   document.getElementById('poSupplier').value = '';
   document.getElementById('poExpected').value = '';
   document.getElementById('poNotes').value = '';
@@ -1739,7 +1751,7 @@ function addPoItemRow() {
   el.id = 'poItemRow' + idx;
   el.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center';
   el.innerHTML = `
-    <input placeholder="Nama barang" id="poItemName${idx}" style="flex:2" oninput="calcPoTotal()">
+    <select id="poItemProduct${idx}" style="flex:2" onchange="calcPoTotal()"><option value="">Pilih produk</option>${purchaseProducts.map(p=>`<option value="${p.id}">${escapeHtml(p.name)} (stok ${p.stock})</option>`).join('')}</select>
     <input type="number" placeholder="Qty" min="1" value="1" id="poItemQty${idx}" style="width:70px" oninput="calcPoTotal()">
     <input type="number" placeholder="Harga satuan" min="0" id="poItemCost${idx}" style="width:120px" oninput="calcPoTotal()">
     <button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('poItemRow${idx}').remove();calcPoTotal()"><i class="fas fa-trash"></i></button>
@@ -1759,12 +1771,13 @@ async function savePurchase() {
   if (!supplier_name) return alert('Nama supplier wajib diisi');
   const items = [];
   for (let i=0;i<poItemCount;i++) {
-    const nameEl = document.getElementById('poItemName'+i);
-    if (!nameEl) continue;
-    const name = nameEl.value.trim();
+    const productEl = document.getElementById('poItemProduct'+i);
+    if (!productEl) continue;
+    const product = purchaseProducts.find(p => String(p.id) === productEl.value);
+    const name = product?.name || '';
     const qty = Number(document.getElementById('poItemQty'+i).value);
     const cost = Number(document.getElementById('poItemCost'+i).value);
-    if (name && qty > 0) items.push({ product_name: name, quantity: qty, unit_cost: cost || 0 });
+    if (name && qty > 0) items.push({ product_id: Number(productEl.value), product_name: name, quantity: qty, unit_cost: cost || 0 });
   }
   if (!items.length) return alert('Isi minimal 1 item barang');
   const body = { supplier_name, expected_date: document.getElementById('poExpected').value || null, notes: document.getElementById('poNotes').value, items };
@@ -1870,6 +1883,7 @@ function printSalesHistory() {
   const periode = (from && to) ? `${from} s/d ${to}` : 'Semua Periode';
   const totalOmzet = rows.reduce((s, r) => s + r.total, 0);
   const win = window.open('', '_blank');
+  if (!win) return alert('Popup diblokir browser. Izinkan popup untuk situs ini lalu coba lagi.');
   win.document.write(`
     <html><head><title>Laporan Riwayat Transaksi - Toko Tri Jaya</title>
     <style>
@@ -2019,7 +2033,7 @@ async function loadFinanceReport() {
     <h3 style="margin-bottom:14px;color:var(--primary)">Ringkasan 30 Hari Terakhir</h3>
     <div style="font-size:.9rem;line-height:2">
       <div style="display:flex;justify-content:space-between"><span>Pendapatan (Omzet)</span><strong>${fmt(finance.omzet)}</strong></div>
-      <div style="display:flex;justify-content:space-between;color:var(--muted)"><span>Harga Pokok Penjualan (HPP)</span><span>${fmt(finance.omzet - finance.labaKotor)}</span></div>
+      <div style="display:flex;justify-content:space-between;color:var(--muted)"><span>Harga Pokok Penjualan (HPP)</span><span>${fmt(finance.hpp ?? (finance.omzet - finance.labaKotor))}</span></div>
       <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px"><span>Laba Kotor</span><strong>${fmt(finance.labaKotor)}</strong></div>
       <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px;margin-top:6px;font-size:1rem"><span><strong>Laba Bersih</strong></span><strong style="color:var(--accent)">${fmt(finance.labaBersih)}</strong></div>
       <div style="display:flex;justify-content:space-between;margin-top:14px"><span>Nilai Persediaan (Aset Stok Saat Ini)</span><strong>${fmt(finance.nilaiPersediaan)}</strong></div>
@@ -2049,6 +2063,7 @@ function printTaxReport() {
 
 function openPrintWindow(title, bodyHtml, subtitle) {
   const win = window.open('', '_blank');
+  if (!win) return alert('Popup diblokir browser. Izinkan popup untuk situs ini lalu coba lagi.');
   win.document.write(`
     <html><head><title>${title} - Toko Tri Jaya</title>
     <style>
