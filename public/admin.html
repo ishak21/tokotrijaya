@@ -485,7 +485,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
         <div class="tab" onclick="showTab('s-seo',this)">SEO & Logo</div>
         <div class="tab" onclick="showTab('s-security',this)">Keamanan</div>
       </div>
-      <form id="settingsForm">
+      <form id="settingsForm" onsubmit="event.preventDefault();return false;">
         <div class="tab-content active" id="s-info">
           <div class="card"><div class="card-body">
             <div class="form-row">
@@ -515,7 +515,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
           <div class="card">
             <div class="card-header">
               <h3>Rekening Bank</h3>
-              <button class="btn btn-primary btn-sm" onclick="openBankModal()"><i class="fas fa-plus"></i> Tambah Rekening</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="openBankModal()"><i class="fas fa-plus"></i> Tambah Rekening</button>
             </div>
             <div class="card-body">
               <div class="table-wrap">
@@ -529,7 +529,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
           <div class="card">
             <div class="card-header">
               <h3>E-Wallet</h3>
-              <button class="btn btn-primary btn-sm" onclick="openEwalletModal()"><i class="fas fa-plus"></i> Tambah E-Wallet</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="openEwalletModal()"><i class="fas fa-plus"></i> Tambah E-Wallet</button>
             </div>
             <div class="card-body">
               <div class="table-wrap">
@@ -608,7 +608,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
           <div class="card">
             <div class="card-header">
               <h3>Kelola Kurir / Jasa Pengiriman</h3>
-              <button class="btn btn-primary btn-sm" onclick="openCourierModal()"><i class="fas fa-plus"></i> Tambah Kurir</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="openCourierModal()"><i class="fas fa-plus"></i> Tambah Kurir</button>
             </div>
             <div class="card-body">
               <div class="table-wrap">
@@ -763,7 +763,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
 <div class="modal-bg" id="purchaseDetailModal">
   <div class="modal-box" style="max-width:620px">
     <div class="modal-top">
-      <h3>Detail Pembelian</h3>
+      <h3>Detail Pembelian</h3><button class="btn btn-sm btn-danger hidden" id="purchaseDeleteBtn" onclick="deletePurchaseFromDetail()"><i class="fas fa-trash"></i> Hapus</button>
       <button class="close-m" onclick="document.getElementById('purchaseDetailModal').classList.remove('open')"><i class="fas fa-times"></i></button>
     </div>
     <div class="modal-content" id="purchaseDetailContent"></div>
@@ -806,7 +806,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
 <div class="modal-bg" id="notaModal">
   <div class="modal-box" style="max-width:420px">
     <div class="modal-top">
-      <h3>Nota Pembeli</h3>
+      <h3>Nota Pembeli</h3><button class="btn btn-sm btn-primary" onclick="printNotaWindow()"><i class="fas fa-print"></i> Cetak / PDF</button>
       <button class="close-m" onclick="document.getElementById('notaModal').classList.remove('open')"><i class="fas fa-times"></i></button>
     </div>
     <div class="modal-content" id="notaModalContent"></div>
@@ -1569,8 +1569,8 @@ function renderBanks() {
       <td>${b.account_name||'-'}</td>
       <td>${b.is_active?'<span class="badge badge-delivered">Aktif</span>':'<span class="badge badge-cancelled">Nonaktif</span>'}</td>
       <td>
-        <button class="btn btn-sm btn-outline" onclick="editBank(${b.id})"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteBank(${b.id})"><i class="fas fa-trash"></i></button>
+        <button type="button" class="btn btn-sm btn-outline" onclick="editBank(${b.id})"><i class="fas fa-edit"></i></button>
+        <button type="button" class="btn btn-sm btn-danger" onclick="deleteBank(${b.id})"><i class="fas fa-trash"></i></button>
       </td>
     </tr>
   `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">Belum ada rekening</td></tr>';
@@ -1613,7 +1613,9 @@ async function saveBank(e) {
 }
 async function deleteBank(id) {
   if (!confirm('Hapus rekening bank ini?')) return;
-  await fetch(`/api/admin/bank-accounts/${id}`, {method:'DELETE'});
+  const res = await fetch(`/api/admin/bank-accounts/${id}`, {method:'DELETE'});
+  const d = await res.json();
+  if (!d.success) return alert(d.error || 'Gagal menghapus rekening');
   loadBanks();
 }
 
@@ -1632,8 +1634,8 @@ function renderEwallets() {
       <td>${w.account_name||'-'}</td>
       <td>${w.is_active?'<span class="badge badge-delivered">Aktif</span>':'<span class="badge badge-cancelled">Nonaktif</span>'}</td>
       <td>
-        <button class="btn btn-sm btn-outline" onclick="editEwallet(${w.id})"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteEwallet(${w.id})"><i class="fas fa-trash"></i></button>
+        <button type="button" class="btn btn-sm btn-outline" onclick="editEwallet(${w.id})"><i class="fas fa-edit"></i></button>
+        <button type="button" class="btn btn-sm btn-danger" onclick="deleteEwallet(${w.id})"><i class="fas fa-trash"></i></button>
       </td>
     </tr>
   `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">Belum ada e-wallet</td></tr>';
@@ -1676,7 +1678,9 @@ async function saveEwallet(e) {
 }
 async function deleteEwallet(id) {
   if (!confirm('Hapus e-wallet ini?')) return;
-  await fetch(`/api/admin/ewallet-accounts/${id}`, {method:'DELETE'});
+  const res = await fetch(`/api/admin/ewallet-accounts/${id}`, {method:'DELETE'});
+  const d = await res.json();
+  if (!d.success) return alert(d.error || 'Gagal menghapus e-wallet');
   loadEwallets();
 }
 
@@ -1748,10 +1752,45 @@ async function viewOrder(id) {
   document.getElementById('orderDetailModal').classList.add('open');
   window.lastViewedOrder = o;
 }
-function printOrderReceipt() {
+// Tombol "Cetak / PDF" di modal Detail Pesanan: langsung buka dialog cetak
+// berisi nota pembeli (pakai mesin cetak iframe anti popup-blocker).
+async function printOrderReceipt() {
   const o = window.lastViewedOrder;
   if (!o) return alert('Detail pesanan belum dimuat.');
-  openPrintWindow('Nota Pembelian', `<div><strong>Invoice:</strong> ${escapeHtml(o.invoice)}<br><strong>Pelanggan:</strong> ${escapeHtml(o.customer_name)}<br><strong>Telepon:</strong> ${escapeHtml(o.customer_phone)}<br><strong>Alamat:</strong> ${escapeHtml(o.customer_address)}</div><table><thead><tr><th>Produk</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr></thead><tbody>${o.items.map(i=>`<tr><td>${escapeHtml(i.product_name)}</td><td>${i.quantity}</td><td>${fmt(i.price)}</td><td>${fmt(i.subtotal)}</td></tr>`).join('')}</tbody></table><div class="totals">Total: ${fmt(o.total)}</div>`, `Invoice ${o.invoice}`);
+  const toko = await getStoreInfoCache();
+  const itemRows = o.items.map(i => `
+    <tr><td>${escapeHtml(i.product_name)}<br><small>${fmt(i.price)} × ${i.quantity}</small></td>
+    <td style="text-align:right;white-space:nowrap"><strong>${fmt(i.subtotal)}</strong></td></tr>
+  `).join('');
+  printHtmlDocument(`Nota ${o.invoice}`, `
+    <div class="nota">
+      <div style="text-align:center;margin-bottom:10px">
+        ${toko.logo?`<img src="${toko.logo}" style="max-height:50px;margin-bottom:6px">`:''}
+        <div style="font-size:18px;font-weight:800">${escapeHtml(toko.site_name)}</div>
+        <div style="font-size:11px;color:#333">${escapeHtml(toko.address)}</div>
+        <div style="font-size:11px;color:#333">Telp/WA: ${escapeHtml(toko.phone)}${toko.email?' • '+escapeHtml(toko.email):''}</div>
+      </div>
+      <div style="border-top:2px dashed #333;border-bottom:2px dashed #333;padding:8px 0;margin-bottom:8px;font-size:12px">
+        <div style="display:flex;justify-content:space-between"><span><strong>NOTA</strong> ${escapeHtml(o.invoice)}</span><span>${new Date(o.created_at).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'})}</span></div>
+        <div>Pelanggan: <strong>${escapeHtml(o.customer_name)}</strong> (${escapeHtml(o.customer_phone||'-')})</div>
+        ${o.customer_address?`<div>Alamat: ${escapeHtml(o.customer_address)}${o.customer_city?', '+escapeHtml(o.customer_city):''}</div>`:''}
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <tbody>${itemRows}</tbody>
+      </table>
+      <div style="border-top:1px dashed #333;margin-top:8px;padding-top:8px;font-size:12px">
+        <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
+        ${+o.ppn_amount>0?`<div style="display:flex;justify-content:space-between"><span>PPN</span><span>${fmt(o.ppn_amount)}</span></div>`:''}
+        <div style="display:flex;justify-content:space-between"><span>Ongkos Kirim${o.shipping_method?' ('+escapeHtml(o.shipping_method)+')':''}</span><span>${fmt(o.shipping_cost)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:1px dashed #333;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px"><span>Metode Bayar</span><span>${PAYMENT_LABEL[o.payment_method]||o.payment_method||'-'} • ${o.payment_status==='lunas'?'LUNAS':'BELUM LUNAS'}</span></div>
+      </div>
+      ${o.notes?`<div style="font-size:11px;margin-top:8px"><strong>Catatan:</strong> ${escapeHtml(o.notes)}</div>`:''}
+      <div style="text-align:center;margin-top:14px;font-size:11px;color:#333;border-top:1px dashed #333;padding-top:8px">
+        Terima kasih telah berbelanja 🙏<br>Barang yang sudah dibeli tidak dapat dikembalikan kecuali ada perjanjian.
+      </div>
+    </div>
+  `, '');
 }
 
 // Kasir & Pelanggan
@@ -1844,7 +1883,20 @@ async function viewPurchaseDetail(id) {
       ${po.notes?`<div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);font-size:.85rem"><strong>Catatan:</strong> ${escapeHtml(po.notes)}</div>`:''}
     `;
     document.getElementById('purchaseDetailModal').classList.add('open');
+    // Tombol hapus hanya untuk PO yang belum diterima (server menolak hapus PO yang sudah diterima)
+    document.getElementById('purchaseDeleteBtn').classList.toggle('hidden', po.status === 'received');
+    window.lastViewedPurchaseId = id;
   } catch(e) { alert(e.message); }
+}
+async function deletePurchaseFromDetail() {
+  const id = window.lastViewedPurchaseId;
+  if (!id) return;
+  if (!confirm('Hapus catatan pembelian ini?')) return;
+  const res = await fetch(`/api/admin/purchases/${id}`, { method: 'DELETE' });
+  const d = await res.json();
+  if (!d.success) return alert(d.error);
+  document.getElementById('purchaseDetailModal').classList.remove('open');
+  loadPurchases();
 }
 async function printPurchaseNota(id) {
   let po;
@@ -2013,6 +2065,7 @@ async function deletePurchase(id) {
   const res = await fetch(`/api/admin/purchases/${id}`, { method: 'DELETE' });
   const d = await res.json();
   if (!d.success) return alert(d.error);
+  delete purchaseDetailCache[id];
   loadPurchases();
 }
 
@@ -2488,8 +2541,8 @@ function renderCouriers() {
       <td>${fmt(c.cost_per_kg)}</td>
       <td>${c.is_active?'<span class="badge badge-delivered">Aktif</span>':'<span class="badge badge-cancelled">Nonaktif</span>'}</td>
       <td>
-        <button class="btn btn-sm btn-outline" onclick="editCourier(${c.id})"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteCourier(${c.id})"><i class="fas fa-trash"></i></button>
+        <button type="button" class="btn btn-sm btn-outline" onclick="editCourier(${c.id})"><i class="fas fa-edit"></i></button>
+        <button type="button" class="btn btn-sm btn-danger" onclick="deleteCourier(${c.id})"><i class="fas fa-trash"></i></button>
       </td>
     </tr>
   `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--muted)">Belum ada kurir</td></tr>';
@@ -2538,7 +2591,9 @@ async function saveCourier(e) {
 }
 async function deleteCourier(id) {
   if (!confirm('Hapus kurir ini?')) return;
-  await fetch(`/api/admin/couriers/${id}`, {method:'DELETE'});
+  const res = await fetch(`/api/admin/couriers/${id}`, {method:'DELETE'});
+  const d = await res.json();
+  if (!d.success) return alert(d.error || 'Gagal menghapus kurir');
   loadCouriers();
 }
 
