@@ -229,7 +229,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
       <!-- PENJUALAN -->
       <div class="nav-section-title" style="color:rgba(255,255,255,.6);font-size:.7rem;text-transform:uppercase;letter-spacing:1px;padding:20px 24px 8px">PENJUALAN</div>
       <div class="nav-item active" onclick="showPage('dashboard',this)"><i class="fas fa-tachometer-alt"></i><span>Ringkasan</span></div>
-      <div class="nav-item" onclick="showPage('sales',this)"><i class="fas fa-history"></i><span>Riwayat</span></div>
+      <div class="nav-item" onclick="showPage('sales',this)"><i class="fas fa-history"></i><span>Riwayat Penjualan</span></div>
       <div class="nav-item" onclick="showPage('preorder',this)"><i class="fas fa-file-invoice"></i><span>Pre-order</span></div>
       <div class="nav-divider"></div>
       <!-- PRODUK & STOK -->
@@ -398,7 +398,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
     <!-- RIWAYAT TRANSAKSI (Kasir) -->
     <div id="page-sales" class="hidden">
       <div class="page-header">
-        <h1>Riwayat Transaksi</h1>
+        <h1>Riwayat Penjualan</h1>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-outline" onclick="loadSalesHistory()"><i class="fas fa-sync"></i> Muat Ulang</button>
           <button class="btn btn-outline" onclick="printSalesHistory()"><i class="fas fa-print"></i> Cetak / Unduh PDF</button>
@@ -746,12 +746,9 @@ tr:hover td{background:rgba(15,42,37,.015)}
       <div class="form-g"><label>Tanggal Diharapkan Tiba</label><input id="poExpected" type="date"></div>
       <div class="form-g"><label>Catatan</label><textarea id="poNotes" placeholder="Opsional"></textarea></div>
       <div class="form-g">
-        <label>Item Barang * — pilih produk yang sudah ada supaya stok otomatis bertambah saat barang diterima</label>
+        <label>Item Barang * — pilih produk lama dari dropdown, ATAU ketik nama barang baru (produk baru otomatis dibuatkan di daftar produk saat barang diterima)</label>
         <div id="poItems"></div>
-        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-sm btn-outline" onclick="addPoItemRow()"><i class="fas fa-plus"></i> Pilih Produk</button>
-          <button type="button" class="btn btn-sm btn-outline" onclick="addPoItemRow(true)"><i class="fas fa-pen"></i> Item Baru (tanpa produk)</button>
-        </div>
+        <button type="button" class="btn btn-sm btn-outline" onclick="addPoItemRow()" style="margin-top:8px"><i class="fas fa-plus"></i> Tambah Baris Item</button>
       </div>
       <div style="text-align:right;font-weight:700;margin-top:10px">Total: <span id="poTotal">Rp 0</span></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
@@ -759,6 +756,17 @@ tr:hover td{background:rgba(15,42,37,.015)}
         <button type="button" class="btn btn-primary" onclick="savePurchase()"><i class="fas fa-save"></i> Simpan Pembelian</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Purchase Detail Modal -->
+<div class="modal-bg" id="purchaseDetailModal">
+  <div class="modal-box" style="max-width:620px">
+    <div class="modal-top">
+      <h3>Detail Pembelian</h3>
+      <button class="close-m" onclick="document.getElementById('purchaseDetailModal').classList.remove('open')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-content" id="purchaseDetailContent"></div>
   </div>
 </div>
 
@@ -954,7 +962,7 @@ function initTopbar() {
   }).catch(()=>{});
   fetch('/api/admin/products?limit=1').then(r=>r.json()).then(d => updateLowStockIndicators(d.low_stock_count||0)).catch(()=>{});
 }
-const PAGE_TITLES = { dashboard:'Ringkasan', kasir:'Kasir', sales:'Riwayat', riwayat:'Riwayat', preorder:'Pre-order', produk:'Produk', products:'Kelola Produk', pembelian:'Pembelian', pelanggan:'Pelanggan', piutang:'Piutang', promo:'Promo', laporan:'Laporan', reports:'Laporan', orders:'Kelola Pesanan', settings:'Pengaturan' };
+const PAGE_TITLES = { dashboard:'Ringkasan', kasir:'Kasir', sales:'Riwayat Penjualan', riwayat:'Riwayat Penjualan', preorder:'Pre-order', produk:'Produk', products:'Kelola Produk', pembelian:'Pembelian', pelanggan:'Pelanggan', piutang:'Piutang', promo:'Promo', laporan:'Laporan', reports:'Laporan', orders:'Kelola Pesanan', settings:'Pengaturan' };
 function handleTopbarSearch(val) {
   // Kalau lagi di halaman produk, search box atas ikut filter produk
   const prodSearch = document.getElementById('prodSearch');
@@ -1793,13 +1801,80 @@ async function loadPurchases() {
       <td>${fmt(po.total_amount)}</td>
       <td>${PO_STATUS_LABEL[po.status] || po.status}</td>
       <td>${new Date(po.created_at).toLocaleDateString('id-ID')}</td>
-      <td>
-        ${po.status==='pending' ? `<button class="btn btn-sm btn-primary" onclick="receivePurchase(${po.id})"><i class="fas fa-check"></i> Terima</button>
-        <button class="btn btn-sm btn-outline" onclick="cancelPurchase(${po.id})"><i class="fas fa-ban"></i></button>` : ''}
-        ${po.status!=='received' ? `<button class="btn btn-sm btn-danger" onclick="deletePurchase(${po.id})"><i class="fas fa-trash"></i></button>` : ''}
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-outline" onclick="viewPurchaseDetail(${po.id})" title="Lihat Detail"><i class="fas fa-eye"></i></button>
+        <button class="btn btn-sm btn-outline" onclick="printPurchaseNota(${po.id})" title="Cetak Nota Pembelian"><i class="fas fa-print"></i></button>
+        ${po.status==='pending' ? `<button class="btn btn-sm btn-primary" onclick="receivePurchase(${po.id})" title="Terima Barang"><i class="fas fa-check"></i></button>
+        <button class="btn btn-sm btn-outline" onclick="cancelPurchase(${po.id})" title="Batalkan"><i class="fas fa-ban"></i></button>` : ''}
+        ${po.status!=='received' ? `<button class="btn btn-sm btn-danger" onclick="deletePurchase(${po.id})" title="Hapus"><i class="fas fa-trash"></i></button>` : ''}
       </td>
     </tr>
   `).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Belum ada pembelian. Klik "Buat Pembelian" untuk mencatat pembelian barang dari supplier.</td></tr>';
+}
+
+// ===== DETAIL & NOTA PEMBELIAN =====
+let purchaseDetailCache = {};
+async function getPurchaseDetail(id) {
+  if (!purchaseDetailCache[id]) {
+    const res = await fetch(`/api/admin/purchases/${id}`);
+    if (!res.ok) throw new Error('Pembelian tidak ditemukan');
+    purchaseDetailCache[id] = await res.json();
+  }
+  return purchaseDetailCache[id];
+}
+async function viewPurchaseDetail(id) {
+  try {
+    const po = await getPurchaseDetail(id);
+    document.getElementById('purchaseDetailContent').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:.88rem">
+        <div><strong>No. PO:</strong> ${po.po_number}</div>
+        <div><strong>Status:</strong> ${po.status==='received'?'Diterima':(po.status==='cancelled'?'Dibatalkan':'Menunggu')}</div>
+        <div><strong>Supplier:</strong> ${escapeHtml(po.supplier_name)}</div>
+        <div><strong>Dibuat:</strong> ${new Date(po.created_at).toLocaleString('id-ID')}</div>
+        ${po.expected_date?`<div><strong>Target Tiba:</strong> ${new Date(po.expected_date).toLocaleDateString('id-ID')}</div>`:''}
+        ${po.received_at?`<div><strong>Diterima:</strong> ${new Date(po.received_at).toLocaleString('id-ID')}</div>`:''}
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Barang</th><th>Qty</th><th>Harga Supplier/pcs</th><th>Harga Jual/pcs</th><th>Subtotal</th></tr></thead>
+        <tbody>
+          ${po.items.map(i=>`<tr><td>${escapeHtml(i.product_name)}${!i.product_id?' <span class="badge badge-pending">baru</span>':''}</td><td>${i.quantity}</td><td>${fmt(i.unit_cost)}</td><td>${+i.sale_price>0?fmt(i.sale_price):'<span style="color:var(--muted)">-</span>'}</td><td>${fmt(i.subtotal)}</td></tr>`).join('')}
+        </tbody></table>
+      </div>
+      <div style="text-align:right;margin-top:12px;font-size:1.05rem">Total: <strong>${fmt(po.total_amount)}</strong></div>
+      ${po.notes?`<div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);font-size:.85rem"><strong>Catatan:</strong> ${escapeHtml(po.notes)}</div>`:''}
+    `;
+    document.getElementById('purchaseDetailModal').classList.add('open');
+  } catch(e) { alert(e.message); }
+}
+async function printPurchaseNota(id) {
+  let po;
+  try { po = await getPurchaseDetail(id); } catch(e) { return alert(e.message); }
+  const toko = await getStoreInfoCache();
+  const itemRows = po.items.map(i => `
+    <tr><td>${escapeHtml(i.product_name)}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${fmt(i.unit_cost)}</td><td style="text-align:right"><strong>${fmt(i.subtotal)}</strong></td></tr>
+  `).join('');
+  printHtmlDocument(`Nota Pembelian ${po.po_number}`, `
+    <div style="text-align:center;margin-bottom:10px">
+      ${toko.logo?`<img src="${toko.logo}" style="max-height:50px;margin-bottom:6px">`:''}
+      <div style="font-size:18px;font-weight:800">${escapeHtml(toko.site_name)}</div>
+      <div style="font-size:11px;color:#333">${escapeHtml(toko.address)}</div>
+      <div style="font-size:11px;color:#333">Telp/WA: ${escapeHtml(toko.phone)}</div>
+    </div>
+    <div style="border-top:2px dashed #333;border-bottom:2px dashed #333;padding:8px 0;margin-bottom:8px;font-size:12px">
+      <div style="display:flex;justify-content:space-between"><span><strong>NOTA PEMBELIAN</strong> ${po.po_number}</span><span>${new Date(po.created_at).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'})}</span></div>
+      <div>Supplier: <strong>${escapeHtml(po.supplier_name)}</strong></div>
+      <div>Status: <strong>${po.status==='received'?'SUDAH DITERIMA':'BELUM DITERIMA'}</strong>${po.received_at?` (${new Date(po.received_at).toLocaleString('id-ID')})`:''}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="border-bottom:1px solid #333"><th style="text-align:left;padding:4px 0">Barang</th><th style="text-align:center;padding:4px 0">Qty</th><th style="text-align:right;padding:4px 0">Harga/pcs</th><th style="text-align:right;padding:4px 0">Subtotal</th></tr></thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+    <div style="text-align:right;font-size:14px;font-weight:800;border-top:1px dashed #333;margin-top:8px;padding-top:8px">TOTAL: ${fmt(po.total_amount)}</div>
+    ${po.notes?`<div style="font-size:11px;margin-top:8px"><strong>Catatan:</strong> ${escapeHtml(po.notes)}</div>`:''}
+    <div style="text-align:center;margin-top:14px;font-size:11px;color:#333;border-top:1px dashed #333;padding-top:8px">
+      Dokumen ini dicetak otomatis oleh sistem Toko Tri Jaya<br>Tanda tangan Supplier: ____________ &nbsp;&nbsp; Penerima: ____________
+    </div>
+  `, `No. PO: ${po.po_number}`);
 }
 let poItemCount = 0;
 let poProductCache = null; // daftar semua produk untuk picker pembelian
@@ -1823,19 +1898,21 @@ async function openPurchaseModal() {
 }
 function poProductOptions() {
   const list = (poProductCache && poProductCache.products) || [];
-  return '<option value="">— Pilih produk (stok otomatis nambah) —</option>' + list.map(p =>
-    `<option value="${p.id}" data-cost="${p.cost_price||0}">${escapeHtml(p.name)}${p.sku?' ('+escapeHtml(p.sku)+')':''} — stok ${p.stock}</option>`
+  return '<option value="">— Barang Baru: ketik nama di kolom samping —</option>' + list.map(p =>
+    `<option value="${p.id}" data-cost="${p.cost_price||0}" data-price="${p.price||0}">${escapeHtml(p.name)}${p.sku?' ('+escapeHtml(p.sku)+')':''} — stok ${p.stock}</option>`
   ).join('');
 }
-function addPoItemRow(freeMode) {
+function addPoItemRow() {
   const idx = poItemCount++;
   const el = document.createElement('div');
   el.id = 'poItemRow' + idx;
-  el.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center';
+  el.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap';
   el.innerHTML = `
-    <select id="poItemProduct${idx}" style="flex:2" onchange="onPoProductChange(${idx})">${freeMode?'<option value="">— Item tanpa produk —</option>'+poProductOptions():poProductOptions()}</select>
-    <input type="number" placeholder="Qty" min="1" value="1" id="poItemQty${idx}" style="width:70px" oninput="calcPoTotal()">
-    <input type="number" placeholder="Harga beli" min="0" id="poItemCost${idx}" style="width:120px" oninput="calcPoTotal()">
+    <select id="poItemProduct${idx}" style="flex:2;min-width:170px" onchange="onPoProductChange(${idx})">${poProductOptions()}</select>
+    <input placeholder="Nama barang baru (kosongkan jika pilih dropdown)" id="poItemName${idx}" style="flex:2;min-width:150px" oninput="calcPoTotal()">
+    <input type="number" placeholder="Qty" min="1" value="1" id="poItemQty${idx}" style="width:60px" oninput="calcPoTotal()">
+    <input type="number" placeholder="Harga supplier/pcs" min="0" id="poItemCost${idx}" style="width:130px" oninput="calcPoTotal()" title="Harga beli dari supplier per pcs">
+    <input type="number" placeholder="Harga jual/pcs" min="0" id="poItemSale${idx}" style="width:120px" title="Harga jual — otomatis terhubung ke harga produk">
     <button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('poItemRow${idx}').remove();calcPoTotal()"><i class="fas fa-trash"></i></button>
   `;
   document.getElementById('poItems').appendChild(el);
@@ -1844,8 +1921,19 @@ function onPoProductChange(idx) {
   const sel = document.getElementById('poItemProduct'+idx);
   const opt = sel.selectedOptions[0];
   const costEl = document.getElementById('poItemCost'+idx);
-  // Isi otomatis harga beli terakhir (modal) dari produk yang dipilih
-  if (opt && opt.dataset.cost && +opt.dataset.cost > 0) costEl.value = opt.dataset.cost;
+  const saleEl = document.getElementById('poItemSale'+idx);
+  const nameEl = document.getElementById('poItemName'+idx);
+  if (opt && sel.value) {
+    // Produk lama dipilih: isi otomatis modal & harga jual, kunci nama
+    if (opt.dataset.cost && +opt.dataset.cost > 0) costEl.value = opt.dataset.cost;
+    if (opt.dataset.price && +opt.dataset.price > 0) saleEl.value = opt.dataset.price;
+    nameEl.value = '';
+    nameEl.placeholder = '(pakai produk dari dropdown)';
+  } else {
+    // Mode barang baru: kosongkan biar diisi manual
+    costEl.value = ''; saleEl.value = '';
+    nameEl.placeholder = 'Nama barang baru';
+  }
   calcPoTotal();
 }
 function calcPoTotal() {
@@ -1860,34 +1948,57 @@ async function savePurchase() {
   const supplier_name = document.getElementById('poSupplier').value.trim();
   if (!supplier_name) return alert('Nama supplier wajib diisi');
   const items = [];
+  const warnings = [];
   for (let i=0;i<poItemCount;i++) {
     const sel = document.getElementById('poItemProduct'+i);
     if (!sel) continue;
-    const productId = sel.value || null;
-    const name = productId ? sel.selectedOptions[0].textContent.split(' — stok')[0].trim() : (sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.trim() : '');
+    const nameEl = document.getElementById('poItemName'+i);
     const qty = Number(document.getElementById('poItemQty'+i).value);
     const cost = Number(document.getElementById('poItemCost'+i).value);
-    if (productId && qty > 0) {
-      items.push({ product_id: +productId, product_name: name, quantity: qty, unit_cost: cost || 0 });
-    } else if (!productId && qty > 0 && name && name !== '— Item tanpa produk —') {
-      items.push({ product_name: name, quantity: qty, unit_cost: cost || 0 });
+    const saleRaw = Number(document.getElementById('poItemSale'+i).value);
+    const sale = Number.isFinite(saleRaw) && saleRaw > 0 ? saleRaw : 0;
+    const newName = (nameEl?.value || '').trim();
+    const productId = sel.value ? +sel.value : null;
+    if (qty < 1) continue;
+    if (productId) {
+      // Restock produk lama
+      items.push({ product_id: productId, product_name: sel.selectedOptions[0].textContent.split(' — stok')[0].trim(), quantity: qty, unit_cost: cost || 0, sale_price: sale });
+      if (!cost) warnings.push('Baris ' + (i+1) + ': harga supplier kosong — HPP tidak akan ter-update');
+    } else if (newName) {
+      // Barang baru — produk akan otomatis dibuatkan saat diterima
+      if (!cost) { alert('Baris ' + (i+1) + ': harga supplier/pcs wajib diisi untuk barang baru'); return; }
+      items.push({ product_name: newName, quantity: qty, unit_cost: cost, sale_price: sale });
+      if (!sale) warnings.push(newName + ': harga jual belum diisi — nanti otomatis pakai markup 30% (bisa diedit di menu Produk)');
     }
   }
-  if (!items.length) return alert('Isi minimal 1 item barang (pilih produk atau tulis nama item)');
+  if (!items.length) return alert('Isi minimal 1 item: pilih produk dari dropdown ATAU ketik nama barang baru + qty + harga supplier/pcs');
+  if (warnings.length && !confirm('Catatan:\n- ' + warnings.join('\n- ') + '\n\nLanjutkan simpan pembelian?')) return;
   const body = { supplier_name, expected_date: document.getElementById('poExpected').value || null, notes: document.getElementById('poNotes').value, items };
-  const res = await fetch('/api/admin/purchases', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  const d = await res.json();
-  if (!d.success) return alert(d.error);
-  document.getElementById('purchaseModal').classList.remove('open');
-  loadPurchases();
+  const btn = document.querySelector('#purchaseModal .btn-primary');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/purchases', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await res.json();
+    if (!d.success) return alert(d.error || 'Gagal menyimpan pembelian');
+    document.getElementById('purchaseModal').classList.remove('open');
+    loadPurchases();
+  } catch(e) {
+    alert('Gagal terhubung ke server: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 async function receivePurchase(id) {
-  if (!confirm('Terima barang ini? Stok produk yang terhubung akan OTOMATIS BERTAMBAH, dan harga beli akan dijadikan Harga Modal (HPP) terbaru.')) return;
+  if (!confirm('Terima barang ini?\n\n- Stok produk lama OTOMATIS BERTAMBAH\n- Harga jual otomatis ter-update dari kolom Harga Jual\n- Produk BARU otomatis dibuatkan datanya (stok, modal, harga jual)')) return;
   const res = await fetch(`/api/admin/purchases/${id}/receive`, { method: 'POST' });
   const d = await res.json();
   if (!d.success) return alert(d.error);
   poProductCache = null; // refresh cache stok produk
-  alert(`Barang diterima! ${d.updated_items} produk stoknya bertambah.`);
+  let msg = 'Barang diterima!';
+  if (d.updated_items) msg += `\n- ${d.updated_items} produk lama stoknya bertambah`;
+  if (d.created_items) msg += `\n- ${d.created_items} produk BARU otomatis ditambahkan ke daftar produk`;
+  if (d.created && d.created.length) msg += '\n\nProduk baru:' + d.created.map(c => `\n- ${c.name} (stok ${c.qty}, modal ${fmt(c.modal)}, jual ${fmt(c.harga_jual)})`).join('');
+  alert(msg);
   loadPurchases();
 }
 async function cancelPurchase(id) {
@@ -1983,7 +2094,7 @@ function printSalesHistory() {
   const to = document.getElementById('salesTo').value;
   const periode = (from && to) ? `${from} s/d ${to}` : 'Semua Periode';
   const totalOmzet = rows.reduce((s, r) => s + r.total, 0);
-  printHtmlDocument('Laporan Riwayat Transaksi', `
+  printHtmlDocument('Laporan Riwayat Penjualan', `
     <table>
       <thead><tr><th>Invoice</th><th>Pelanggan</th><th>Total</th><th>Metode</th><th>Status Bayar</th><th>Pengiriman</th><th>Waktu</th></tr></thead>
       <tbody>

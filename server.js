@@ -243,6 +243,9 @@ const poItemCols = db.prepare("PRAGMA table_info(purchase_order_items)").all().m
 if (!poItemCols.includes('product_id')) {
   db.exec('ALTER TABLE purchase_order_items ADD COLUMN product_id INTEGER');
 }
+if (!poItemCols.includes('sale_price')) {
+  db.exec('ALTER TABLE purchase_order_items ADD COLUMN sale_price REAL DEFAULT 0');
+}
 const orderCols = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
 if (!orderCols.includes('payment_status')) {
   db.exec("ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'pending'");
@@ -1244,23 +1247,37 @@ app.post('/api/admin/purchases', requireAdmin, (req, res) => {
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Minimal 1 item pembelian' });
 
   try {
+    // Item TIDAK wajib terhubung produk — produk baru boleh belum ada di daftar produk.
+    // Saat barang diterima, produk baru otomatis dibuatkan datanya (lihat endpoint /receive).
     const clean = items.map(i => {
       const qty = Number(i.quantity), cost = Number(i.unit_cost);
-      if (!i.product_name || !Number.isFinite(qty) || qty < 1 || !Number.isFinite(cost) || cost < 0)
-        throw new Error('Data item pembelian tidak valid');
+      const name = String(i.product_name || '').trim();
+      if (!name || !Number.isFinite(qty) || qty < 1 || !Number.isFinite(cost) || cost < 0)
+        throw new Error('Data item pembelian tidak valid (nama, qty, dan harga supplier/pcs wajib diisi)');
+      const sale = Number(i.sale_price);
       const productId = i.product_id ? +i.product_id : null;
-      const product = productId ? db.prepare('SELECT id,name FROM products WHERE id=? AND is_active=1').get(productId) : null;
-      if (!product) throw new Error('Setiap item pembelian harus memilih produk aktif');
-      return { product_id: product.id, product_name: product.name, quantity: qty, unit_cost: cost, subtotal: qty * cost };
+      let product = null;
+      if (productId) {
+        product = db.prepare('SELECT id,name FROM products WHERE id=?').get(productId);
+        if (!product) throw new Error(`Produk dengan ID ${productId} tidak ditemukan`);
+      }
+      return {
+        product_id: product ? product.id : null,
+        product_name: product ? product.name : name,
+        quantity: qty,
+        unit_cost: cost,
+        sale_price: Number.isFinite(sale) && sale > 0 ? sale : 0,
+        subtotal: qty * cost
+      };
     });
     const total = clean.reduce((s, i) => s + i.subtotal, 0);
     const poNumber = 'PO' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
 
-    const insItem = db.prepare('INSERT INTO purchase_order_items (po_id,product_id,product_name,quantity,unit_cost,subtotal) VALUES (?,?,?,?,?,?)');
+    const insItem = db.prepare('INSERT INTO purchase_order_items (po_id,product_id,product_name,quantity,unit_cost,sale_price,subtotal) VALUES (?,?,?,?,?,?,?)');
     const create = db.transaction(() => {
       const r = db.prepare('INSERT INTO purchase_orders (po_number,supplier_name,expected_date,status,total_amount,notes) VALUES (?,?,?,?,?,?)')
         .run(poNumber, supplier_name, expected_date || null, 'pending', total, notes || '');
-      clean.forEach(i => insItem.run(r.lastInsertRowid, i.product_id, i.product_name, i.quantity, i.unit_cost, i.subtotal));
+      clean.forEach(i => insItem.run(r.lastInsertRowid, i.product_id, i.product_name, i.quantity, i.unit_cost, i.sale_price, i.subtotal));
       return r.lastInsertRowid;
     });
     const id = create();
@@ -1278,24 +1295,40 @@ app.post('/api/admin/purchases/:id/receive', requireAdmin, (req, res) => {
   if (po.status === 'cancelled') return res.status(400).json({ error: 'Pembelian ini sudah dibatalkan' });
 
   const items = db.prepare('SELECT * FROM purchase_order_items WHERE po_id=?').all(po.id);
-  const getProduct = db.prepare('SELECT stock,cost_price FROM products WHERE id=?');
+  const getProduct = db.prepare('SELECT stock,cost_price,price FROM products WHERE id=?');
   const updStock = db.prepare('UPDATE products SET stock=stock+?,cost_price=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');
+  const updPrice = db.prepare('UPDATE products SET price=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');
+  const linkItem = db.prepare('UPDATE purchase_order_items SET product_id=? WHERE id=?');
+  const insProduct = db.prepare('INSERT INTO products (name,price,cost_price,stock,category,weight,image,sku,low_stock_threshold,is_active) VALUES (?,?,?,?,?,?,?,?,?,1)');
   const updatedItems = [];
+  const createdItems = [];
   const receive = db.transaction(() => {
     items.forEach(i => {
-      if (!i.product_id) return;
+      const sale = +i.sale_price > 0 ? +i.sale_price : 0;
+      if (!i.product_id) {
+        // === PRODUK BARU: otomatis buatkan datanya di daftar produk ===
+        // Harga jual: pakai sale_price dari form pembelian; kalau kosong, default markup 30% (bisa diedit di menu Produk)
+        const hargaJual = sale > 0 ? sale : Math.ceil(i.unit_cost * 1.3);
+        const r = insProduct.run(i.product_name, hargaJual, i.unit_cost, i.quantity, '', 0, '', null, 5);
+        const newId = r.lastInsertRowid;
+        linkItem.run(newId, i.id);
+        createdItems.push({ product_id: newId, name: i.product_name, qty: i.quantity, modal: i.unit_cost, harga_jual: hargaJual, harga_jual_default: sale <= 0 });
+        return;
+      }
       const product = getProduct.get(i.product_id);
       if (!product) return; // produk sudah dihapus, lewati item ini
       // HPP rata-rata tertimbang: (stok lama × modal lama + pembelian baru) ÷ total stok
       const nextStock = product.stock + i.quantity;
       const avgCost = nextStock > 0 ? ((product.stock * (Number(product.cost_price)||0)) + (i.quantity * i.unit_cost)) / nextStock : i.unit_cost;
       updStock.run(i.quantity, avgCost, i.product_id);
-      updatedItems.push({ product_id: i.product_id, name: i.product_name, qty: i.quantity, stock_before: product.stock, stock_after: nextStock, hpp_baru: Math.round(avgCost) });
+      // Harga jual terhubung: update harga produk dari kolom Harga Jual di pembelian
+      if (sale > 0 && sale !== +product.price) updPrice.run(sale, i.product_id);
+      updatedItems.push({ product_id: i.product_id, name: i.product_name, qty: i.quantity, stock_before: product.stock, stock_after: nextStock, hpp_baru: Math.round(avgCost), harga_jual_diupdate: sale > 0 && sale !== +product.price ? sale : null });
     });
     db.prepare("UPDATE purchase_orders SET status='received',received_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(po.id);
   });
   receive();
-  res.json({ success: true, updated_items: updatedItems.length, items: updatedItems });
+  res.json({ success: true, updated_items: updatedItems.length, created_items: createdItems.length, items: updatedItems, created: createdItems });
 });
 
 // Tambah item produk ke PO yang belum diterima (menghubungkan pembelian lama ke produk)
