@@ -100,6 +100,7 @@ input,select,textarea{font-family:var(--font-b)}
 
 /* Cards */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px}
+@media(max-width:640px){.stats-grid{grid-template-columns:repeat(3,1fr);gap:10px}}
 .stat-card{background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);display:flex;gap:16px;align-items:center;border:1px solid var(--border)}
 .stat-icon{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font-size:1.1rem;flex-shrink:0}
 .stat-icon.green{background:var(--primary-light);color:var(--primary)}
@@ -188,6 +189,14 @@ tr:hover td{background:rgba(15,42,37,.015)}
   .sidebar{width:60px}.sidebar-logo h2,.sidebar-logo small,.nav-item span{display:none}
   .nav-item{justify-content:center;padding:14px 0}.nav-item i{margin:0}
   .form-row,.form-row-3{grid-template-columns:1fr}
+}
+/* Compact 3-across stats on phones (desktop-like layout) */
+@media(max-width:640px){
+  .stat-card{flex-direction:column;align-items:flex-start;gap:8px;padding:12px}
+  .stat-icon{width:36px;height:36px;border-radius:10px;font-size:.95rem}
+  .stat-label{font-size:.68rem}
+  .stat-value{font-size:1rem}
+  .stat-sub{font-size:.65rem}
 }
 
 .hidden{display:none!important}
@@ -714,6 +723,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
           </div>
           <input type="file" id="prodImageUpload" accept="image/*" style="display:none" onchange="uploadProductImage(this)">
           <input type="hidden" id="prodImage">
+          <div id="prodUploadStatus" class="stat-sub hidden" style="margin-top:6px;color:#0d9488"></div>
         </div>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
           <button type="button" class="btn btn-outline" onclick="closeProdModal()">Batal</button>
@@ -829,7 +839,7 @@ tr:hover td{background:rgba(15,42,37,.015)}
 <div class="modal-bg" id="orderDetailModal">
   <div class="modal-box" style="max-width:600px">
     <div class="modal-top">
-      <h3>Detail Pesanan</h3>
+      <h3>Detail Pesanan</h3><button class="btn btn-sm btn-primary" onclick="printOrderReceipt()"><i class="fas fa-print"></i> Cetak / PDF</button>
       <button class="close-m" onclick="document.getElementById('orderDetailModal').classList.remove('open')"><i class="fas fa-times"></i></button>
     </div>
     <div class="modal-content" id="orderDetailContent"></div>
@@ -1445,6 +1455,9 @@ function editProduct(id) {
 function closeProdModal() { document.getElementById('prodModal').classList.remove('open'); }
 async function saveProduct(e) {
   e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn && btn.disabled) return;
+  if (_prodUploadPending) { alert('Mohon tunggu, gambar masih dalam proses unggah...'); return; }
   const id = document.getElementById('prodId').value;
   const body = {
     name: document.getElementById('prodName').value,
@@ -1460,9 +1473,14 @@ async function saveProduct(e) {
   };
   const url = id ? `/api/admin/products/${id}` : '/api/admin/products';
   const method = id ? 'PUT' : 'POST';
-  const res = await fetch(url, {method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const d = await res.json();
-  if (d.success) { closeProdModal(); prodCategoriesCache = null; loadAdminProducts(); } else alert(d.error);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
+  try {
+    const res = await fetch(url, {method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await res.json();
+    if (d.success) { closeProdModal(); prodCategoriesCache = null; loadAdminProducts(); } else alert(d.error);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Simpan'; }
+  }
 }
 async function deleteProduct(id) {
   if (!confirm('Hapus produk ini?')) return;
@@ -1499,15 +1517,32 @@ async function importProductsCsv(input) {
   }
 }
 
+let _prodUploadPending = false;
 async function uploadProductImage(input) {
-  if (!input.files[0]) return;
-  const fd = new FormData(); fd.append('file', input.files[0]);
-  const res = await fetch('/api/upload?type=products', {method:'POST',body:fd});
-  const d = await res.json();
-  if (d.success) {
-    document.getElementById('prodImage').value = d.url;
-    document.getElementById('prodPreview').src = d.url;
-    document.getElementById('prodPreview').classList.remove('hidden');
+  const file = input.files[0];
+  const statusEl = document.getElementById('prodUploadStatus');
+  if (!file) return;
+  try {
+    _prodUploadPending = true;
+    statusEl.textContent = '\u23f3 Mengunggah gambar, mohon tunggu...';
+    statusEl.classList.remove('hidden');
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch('/api/upload?type=products', {method:'POST',body:fd});
+    const d = await res.json();
+    if (d.success) {
+      document.getElementById('prodImage').value = d.url;
+      document.getElementById('prodPreview').src = d.url;
+      document.getElementById('prodPreview').classList.remove('hidden');
+      statusEl.textContent = '\u2705 Gambar berhasil diunggah';
+      setTimeout(()=>statusEl.classList.add('hidden'), 2500);
+    } else {
+      statusEl.textContent = '\u274c ' + (d.error || 'Gagal upload gambar');
+    }
+  } catch(err) {
+    statusEl.textContent = '\u274c Gagal upload gambar (cek koneksi internet)';
+  } finally {
+    _prodUploadPending = false;
+    input.value = '';
   }
 }
 
@@ -1664,8 +1699,12 @@ async function loadOrders() {
   `).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted)">Belum ada pesanan</td></tr>';
 }
 async function updateOrderStatus(id, status) {
-  await fetch(`/api/admin/orders/${id}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  const res = await fetch(`/api/admin/orders/${id}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  const d = await res.json();
+  if (!res.ok || !d.success) { alert(d.error || 'Status pesanan gagal diperbarui'); loadOrders(); return; }
   loadOrders();
+  // Refresh tab lain yang sedang terbuka agar status langsung sinkron
+  if (!document.getElementById('page-sales')?.classList.contains('hidden')) loadSalesHistory();
 }
 async function viewOrder(id) {
   const res = await fetch(`/api/admin/orders/${id}`);
@@ -1699,6 +1738,12 @@ async function viewOrder(id) {
     ${o.notes?`<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);font-size:.85rem"><strong>Catatan:</strong> ${o.notes}</div>`:''}
   `;
   document.getElementById('orderDetailModal').classList.add('open');
+  window.lastViewedOrder = o;
+}
+function printOrderReceipt() {
+  const o = window.lastViewedOrder;
+  if (!o) return alert('Detail pesanan belum dimuat.');
+  openPrintWindow('Nota Pembelian', `<div><strong>Invoice:</strong> ${escapeHtml(o.invoice)}<br><strong>Pelanggan:</strong> ${escapeHtml(o.customer_name)}<br><strong>Telepon:</strong> ${escapeHtml(o.customer_phone)}<br><strong>Alamat:</strong> ${escapeHtml(o.customer_address)}</div><table><thead><tr><th>Produk</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr></thead><tbody>${o.items.map(i=>`<tr><td>${escapeHtml(i.product_name)}</td><td>${i.quantity}</td><td>${fmt(i.price)}</td><td>${fmt(i.subtotal)}</td></tr>`).join('')}</tbody></table><div class="totals">Total: ${fmt(o.total)}</div>`, `Invoice ${o.invoice}`);
 }
 
 // Kasir & Pelanggan
@@ -1958,16 +2003,8 @@ async function markPaymentLunas(orderId) {
 }
 
 // ===== UPDATE STATUS PESANAN (dipakai dropdown di Riwayat, Orders, dsb.) =====
-async function updateOrderStatus(id, status) {
-  const res = await fetch(`/api/admin/orders/${id}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
-  const d = await res.json();
-  if (!d.success) { alert(d.error || 'Gagal mengubah status'); loadSalesHistory(); return; }
-  const label = statusLabel[status] || status;
-  // Tampilkan info singkat tanpa ganggu alur
-  console.log(`Status pesanan #${id} diubah ke: ${label}`);
-  if (typeof lastSalesHistoryRows !== 'undefined') loadSalesHistory();
-  if (!document.getElementById('page-orders')?.classList.contains('hidden')) loadOrders();
-}
+// Implementasi utama ada di bagian Orders (di atas); fungsi ini hanya alias kompatibilitas
+// agar pemanggilan dari baris lain tetap jalan tanpa duplikasi logika.
 
 // ===== NOTA PEMBELI (struk untuk pembeli) =====
 let notaCache = {};
