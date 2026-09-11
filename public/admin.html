@@ -617,7 +617,8 @@ tr:hover td{background:rgba(15,42,37,.015)}
       <div class="page-header"><h1>Laporan</h1></div>
       <div class="report-tabs">
         <button class="report-tab active" id="tabBtn-keuangan" onclick="switchReportTab('keuangan')"><i class="fas fa-wallet"></i> Keuangan</button>
-        <button class="report-tab" id="tabBtn-pajak" onclick="switchReportTab('pajak')"><i class="fas fa-file-invoice"></i> Pajak</button>
+        <button class="report-tab" id="tabBtn-biaya" onclick="switchReportTab('biaya')"><i class="fas fa-receipt"></i> Biaya Operasional</button>
+        <button class="report-menu-gap report-tab" id="tabBtn-pajak" onclick="switchReportTab('pajak')"><i class="fas fa-file-invoice"></i> Pajak</button>
       </div>
 
       <!-- TAB: KEUANGAN -->
@@ -629,6 +630,22 @@ tr:hover td{background:rgba(15,42,37,.015)}
         <div class="stats-grid" id="financeStatsGrid"></div>
         <div class="card">
           <div class="card-body" id="financeDetailContent"></div>
+        </div>
+      </div>
+
+      <!-- TAB: BIAYA OPERASIONAL -->
+      <div id="reportTab-biaya" class="report-tab-content hidden">
+        <div class="filters" style="margin-bottom:16px">
+          <button class="btn btn-primary btn-sm" onclick="openExpenseModal()"><i class="fas fa-plus"></i> Tambah Biaya</button>
+        </div>
+        <div class="stats-grid" id="expenseStatsGrid"></div>
+        <div class="card">
+          <div class="card-body">
+            <div class="table-wrap">
+              <table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Kategori</th><th>Nominal</th><th>Aksi</th></tr></thead>
+              <tbody id="expenseTable"></tbody></table>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -677,11 +694,14 @@ tr:hover td{background:rgba(15,42,37,.015)}
         <div class="form-g"><label>Nama Produk *</label><input id="prodName" required></div>
         <div class="form-g"><label>Deskripsi</label><textarea id="prodDesc"></textarea></div>
         <div class="form-row-3">
-          <div class="form-g"><label>Harga (Rp) *</label><input id="prodPrice" type="number" required min="0"></div>
+          <div class="form-g"><label>Harga Jual (Rp) *</label><input id="prodPrice" type="number" required min="0"></div>
+          <div class="form-g"><label>Harga Modal / HPP (Rp)</label><input id="prodCost" type="number" value="0" min="0" placeholder="0"></div>
           <div class="form-g"><label>Stok</label><input id="prodStock" type="number" value="0" min="0"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-g"><label>Kategori</label><input id="prodCategory" placeholder="Elektronik, Fashion, dll"></div>
           <div class="form-g"><label>Berat (gram)</label><input id="prodWeight" type="number" value="0" min="0"></div>
         </div>
-        <div class="form-g"><label>Kategori</label><input id="prodCategory" placeholder="Elektronik, Fashion, dll"></div>
         <div class="form-row-3">
           <div class="form-g"><label>SKU / Kode Produk</label><input id="prodSku" placeholder="Opsional, harus unik"></div>
           <div class="form-g"><label>Ambang Stok Menipis</label><input id="prodLowStock" type="number" value="5" min="0"></div>
@@ -716,9 +736,12 @@ tr:hover td{background:rgba(15,42,37,.015)}
       <div class="form-g"><label>Tanggal Diharapkan Tiba</label><input id="poExpected" type="date"></div>
       <div class="form-g"><label>Catatan</label><textarea id="poNotes" placeholder="Opsional"></textarea></div>
       <div class="form-g">
-        <label>Item Barang *</label>
+        <label>Item Barang * — pilih produk yang sudah ada supaya stok otomatis bertambah saat barang diterima</label>
         <div id="poItems"></div>
-        <button type="button" class="btn btn-sm btn-outline" onclick="addPoItemRow()" style="margin-top:8px"><i class="fas fa-plus"></i> Tambah Item</button>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-sm btn-outline" onclick="addPoItemRow()"><i class="fas fa-plus"></i> Pilih Produk</button>
+          <button type="button" class="btn btn-sm btn-outline" onclick="addPoItemRow(true)"><i class="fas fa-pen"></i> Item Baru (tanpa produk)</button>
+        </div>
       </div>
       <div style="text-align:right;font-weight:700;margin-top:10px">Total: <span id="poTotal">Rp 0</span></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
@@ -726,6 +749,49 @@ tr:hover td{background:rgba(15,42,37,.015)}
         <button type="button" class="btn btn-primary" onclick="savePurchase()"><i class="fas fa-save"></i> Simpan Pembelian</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Expense Modal -->
+<div class="modal-bg" id="expenseModal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-top">
+      <h3>Tambah Biaya Operasional</h3>
+      <button class="close-m" onclick="document.getElementById('expenseModal').classList.remove('open')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-content">
+      <div class="form-g"><label>Keterangan *</label><input id="expenseDesc" placeholder="Contoh: Bayar listrik, sewa kios, gaji karyawan"></div>
+      <div class="form-row">
+        <div class="form-g"><label>Nominal (Rp) *</label><input id="expenseAmount" type="number" min="1" placeholder="50000"></div>
+        <div class="form-g"><label>Tanggal</label><input id="expenseDate" type="date"></div>
+      </div>
+      <div class="form-g">
+        <label>Kategori</label>
+        <select id="expenseCategory">
+          <option value="operasional">Operasional</option>
+          <option value="gaji">Gaji Karyawan</option>
+          <option value="sewa">Sewa Tempat</option>
+          <option value="listrik-air">Listrik & Air</option>
+          <option value="transport">Transport</option>
+          <option value="lainnya">Lainnya</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('expenseModal').classList.remove('open')">Batal</button>
+        <button type="button" class="btn btn-primary" onclick="saveExpense()"><i class="fas fa-save"></i> Simpan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nota Modal -->
+<div class="modal-bg" id="notaModal">
+  <div class="modal-box" style="max-width:420px">
+    <div class="modal-top">
+      <h3>Nota Pembeli</h3>
+      <button class="close-m" onclick="document.getElementById('notaModal').classList.remove('open')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-content" id="notaModalContent"></div>
   </div>
 </div>
 
@@ -1346,6 +1412,7 @@ function openProductModal(id) {
   document.getElementById('prodName').value = '';
   document.getElementById('prodDesc').value = '';
   document.getElementById('prodPrice').value = '';
+  document.getElementById('prodCost').value = '0';
   document.getElementById('prodStock').value = '0';
   document.getElementById('prodWeight').value = '0';
   document.getElementById('prodCategory').value = '';
@@ -1363,6 +1430,7 @@ function editProduct(id) {
   document.getElementById('prodName').value = p.name;
   document.getElementById('prodDesc').value = p.description;
   document.getElementById('prodPrice').value = p.price;
+  document.getElementById('prodCost').value = p.cost_price || 0;
   document.getElementById('prodStock').value = p.stock;
   document.getElementById('prodWeight').value = p.weight;
   document.getElementById('prodCategory').value = p.category;
@@ -1382,6 +1450,7 @@ async function saveProduct(e) {
     name: document.getElementById('prodName').value,
     description: document.getElementById('prodDesc').value,
     price: document.getElementById('prodPrice').value,
+    cost_price: document.getElementById('prodCost').value || 0,
     stock: document.getElementById('prodStock').value,
     weight: document.getElementById('prodWeight').value,
     category: document.getElementById('prodCategory').value,
@@ -1688,28 +1757,51 @@ async function loadPurchases() {
   `).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Belum ada pembelian. Klik "Buat Pembelian" untuk mencatat pembelian barang dari supplier.</td></tr>';
 }
 let poItemCount = 0;
-function openPurchaseModal() {
+let poProductCache = null; // daftar semua produk untuk picker pembelian
+async function ensurePoProducts() {
+  if (poProductCache) return poProductCache;
+  try {
+    poProductCache = await (await fetch('/api/admin/products?limit=200&sort=name_asc')).json();
+  } catch(e) { poProductCache = { products: [] }; }
+  return poProductCache;
+}
+async function openPurchaseModal() {
   document.getElementById('poSupplier').value = '';
   document.getElementById('poExpected').value = '';
   document.getElementById('poNotes').value = '';
   document.getElementById('poItems').innerHTML = '';
   poItemCount = 0;
+  await ensurePoProducts();
   addPoItemRow();
   document.getElementById('poTotal').textContent = 'Rp 0';
   document.getElementById('purchaseModal').classList.add('open');
 }
-function addPoItemRow() {
+function poProductOptions() {
+  const list = (poProductCache && poProductCache.products) || [];
+  return '<option value="">— Pilih produk (stok otomatis nambah) —</option>' + list.map(p =>
+    `<option value="${p.id}" data-cost="${p.cost_price||0}">${escapeHtml(p.name)}${p.sku?' ('+escapeHtml(p.sku)+')':''} — stok ${p.stock}</option>`
+  ).join('');
+}
+function addPoItemRow(freeMode) {
   const idx = poItemCount++;
   const el = document.createElement('div');
   el.id = 'poItemRow' + idx;
   el.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center';
   el.innerHTML = `
-    <input placeholder="Nama barang" id="poItemName${idx}" style="flex:2" oninput="calcPoTotal()">
+    <select id="poItemProduct${idx}" style="flex:2" onchange="onPoProductChange(${idx})">${freeMode?'<option value="">— Item tanpa produk —</option>'+poProductOptions():poProductOptions()}</select>
     <input type="number" placeholder="Qty" min="1" value="1" id="poItemQty${idx}" style="width:70px" oninput="calcPoTotal()">
-    <input type="number" placeholder="Harga satuan" min="0" id="poItemCost${idx}" style="width:120px" oninput="calcPoTotal()">
+    <input type="number" placeholder="Harga beli" min="0" id="poItemCost${idx}" style="width:120px" oninput="calcPoTotal()">
     <button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('poItemRow${idx}').remove();calcPoTotal()"><i class="fas fa-trash"></i></button>
   `;
   document.getElementById('poItems').appendChild(el);
+}
+function onPoProductChange(idx) {
+  const sel = document.getElementById('poItemProduct'+idx);
+  const opt = sel.selectedOptions[0];
+  const costEl = document.getElementById('poItemCost'+idx);
+  // Isi otomatis harga beli terakhir (modal) dari produk yang dipilih
+  if (opt && opt.dataset.cost && +opt.dataset.cost > 0) costEl.value = opt.dataset.cost;
+  calcPoTotal();
 }
 function calcPoTotal() {
   let total = 0;
@@ -1724,14 +1816,19 @@ async function savePurchase() {
   if (!supplier_name) return alert('Nama supplier wajib diisi');
   const items = [];
   for (let i=0;i<poItemCount;i++) {
-    const nameEl = document.getElementById('poItemName'+i);
-    if (!nameEl) continue;
-    const name = nameEl.value.trim();
+    const sel = document.getElementById('poItemProduct'+i);
+    if (!sel) continue;
+    const productId = sel.value || null;
+    const name = productId ? sel.selectedOptions[0].textContent.split(' — stok')[0].trim() : (sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.trim() : '');
     const qty = Number(document.getElementById('poItemQty'+i).value);
     const cost = Number(document.getElementById('poItemCost'+i).value);
-    if (name && qty > 0) items.push({ product_name: name, quantity: qty, unit_cost: cost || 0 });
+    if (productId && qty > 0) {
+      items.push({ product_id: +productId, product_name: name, quantity: qty, unit_cost: cost || 0 });
+    } else if (!productId && qty > 0 && name && name !== '— Item tanpa produk —') {
+      items.push({ product_name: name, quantity: qty, unit_cost: cost || 0 });
+    }
   }
-  if (!items.length) return alert('Isi minimal 1 item barang');
+  if (!items.length) return alert('Isi minimal 1 item barang (pilih produk atau tulis nama item)');
   const body = { supplier_name, expected_date: document.getElementById('poExpected').value || null, notes: document.getElementById('poNotes').value, items };
   const res = await fetch('/api/admin/purchases', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
   const d = await res.json();
@@ -1740,10 +1837,12 @@ async function savePurchase() {
   loadPurchases();
 }
 async function receivePurchase(id) {
-  if (!confirm('Terima barang ini? Stok produk akan otomatis bertambah (untuk barang yang sudah terhubung ke produk di sistem).')) return;
+  if (!confirm('Terima barang ini? Stok produk yang terhubung akan OTOMATIS BERTAMBAH, dan harga beli akan dijadikan Harga Modal (HPP) terbaru.')) return;
   const res = await fetch(`/api/admin/purchases/${id}/receive`, { method: 'POST' });
   const d = await res.json();
   if (!d.success) return alert(d.error);
+  poProductCache = null; // refresh cache stok produk
+  alert(`Barang diterima! ${d.updated_items} produk stoknya bertambah.`);
   loadPurchases();
 }
 async function cancelPurchase(id) {
@@ -1795,10 +1894,15 @@ async function loadSalesHistory() {
         ${PAY_STATUS_LABEL[o.payment_status] || o.payment_status}
         ${o.payment_status === 'pending' ? `<button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="markPaymentLunas(${o.id})" title="Tandai Lunas"><i class="fas fa-check"></i></button>` : ''}
       </td>
-      <td><span class="badge badge-${o.status}">${statusLabel[o.status]||o.status}</span></td>
+      <td>
+        <select style="padding:4px 6px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:.75rem" onchange="updateOrderStatus(${o.id},this.value)">
+          ${['pending','confirmed','shipped','delivered','cancelled'].map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${statusLabel[s]||s}</option>`).join('')}
+        </select>
+      </td>
       <td>${new Date(o.created_at).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'})}</td>
       <td>
         <button class="btn btn-sm btn-outline" onclick="viewOrder(${o.id})" title="Lihat Detail"><i class="fas fa-eye"></i></button>
+        <button class="btn btn-sm btn-outline" onclick="printNota(${o.id})" title="Cetak Nota"><i class="fas fa-print"></i></button>
         <button class="btn btn-sm btn-danger" onclick="deleteSaleHistory(${o.id})" title="Hapus"><i class="fas fa-trash"></i></button>
       </td>
     </tr>
@@ -1834,32 +1938,15 @@ function printSalesHistory() {
   const to = document.getElementById('salesTo').value;
   const periode = (from && to) ? `${from} s/d ${to}` : 'Semua Periode';
   const totalOmzet = rows.reduce((s, r) => s + r.total, 0);
-  const win = window.open('', '_blank');
-  win.document.write(`
-    <html><head><title>Laporan Riwayat Transaksi - Toko Tri Jaya</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:30px;color:#111}
-      h1{font-size:20px;margin-bottom:2px}
-      .sub{color:#555;font-size:13px;margin-bottom:20px}
-      table{width:100%;border-collapse:collapse;margin-top:10px}
-      th,td{border:1px solid #ccc;padding:7px 8px;font-size:12px;text-align:left}
-      th{background:#f3f4f6}
-      .totals{margin-top:16px;text-align:right;font-size:14px;font-weight:bold}
-      @media print{ .no-print{display:none} }
-    </style></head><body>
-    <h1>Toko Tri Jaya — Riwayat Transaksi</h1>
-    <div class="sub">Periode: ${periode} &nbsp;|&nbsp; Dicetak: ${new Date().toLocaleString('id-ID')}</div>
+  printHtmlDocument('Laporan Riwayat Transaksi', `
     <table>
       <thead><tr><th>Invoice</th><th>Pelanggan</th><th>Total</th><th>Metode</th><th>Status Bayar</th><th>Pengiriman</th><th>Waktu</th></tr></thead>
       <tbody>
-        ${rows.map(o => `<tr><td>${o.invoice}</td><td>${o.customer_name}</td><td>${fmt(o.total)}</td><td>${PAYMENT_LABEL[o.payment_method]||o.payment_method}</td><td>${o.payment_status==='lunas'?'Lunas':'Pending'}</td><td>${statusLabel[o.status]||o.status}</td><td>${new Date(o.created_at).toLocaleString('id-ID')}</td></tr>`).join('')}
+        ${rows.map(o => `<tr><td>${o.invoice}</td><td>${escapeHtml(o.customer_name)}</td><td>${fmt(o.total)}</td><td>${PAYMENT_LABEL[o.payment_method]||o.payment_method}</td><td>${o.payment_status==='lunas'?'Lunas':'Pending'}</td><td>${statusLabel[o.status]||o.status}</td><td>${new Date(o.created_at).toLocaleString('id-ID')}</td></tr>`).join('')}
       </tbody>
     </table>
     <div class="totals">Total Transaksi: ${rows.length} &nbsp;|&nbsp; Total Omzet: ${fmt(totalOmzet)}</div>
-    <script>window.onload = () => window.print();<\/script>
-    </body></html>
-  `);
-  win.document.close();
+  `, `Periode: ${periode}`);
 }
 async function markPaymentLunas(orderId) {
   if (!confirm('Tandai pesanan ini sebagai LUNAS?')) return;
@@ -1868,6 +1955,91 @@ async function markPaymentLunas(orderId) {
   if (!d.success) return alert(d.error);
   loadSalesHistory();
   if (!document.getElementById('page-piutang').classList.contains('hidden')) loadPiutang();
+}
+
+// ===== UPDATE STATUS PESANAN (dipakai dropdown di Riwayat, Orders, dsb.) =====
+async function updateOrderStatus(id, status) {
+  const res = await fetch(`/api/admin/orders/${id}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  const d = await res.json();
+  if (!d.success) { alert(d.error || 'Gagal mengubah status'); loadSalesHistory(); return; }
+  const label = statusLabel[status] || status;
+  // Tampilkan info singkat tanpa ganggu alur
+  console.log(`Status pesanan #${id} diubah ke: ${label}`);
+  if (typeof lastSalesHistoryRows !== 'undefined') loadSalesHistory();
+  if (!document.getElementById('page-orders')?.classList.contains('hidden')) loadOrders();
+}
+
+// ===== NOTA PEMBELI (struk untuk pembeli) =====
+let notaCache = {};
+async function printNota(orderId) {
+  let o = notaCache[orderId];
+  if (!o) {
+    const res = await fetch(`/api/admin/orders/${orderId}`);
+    if (!res.ok) return alert('Gagal memuat data pesanan');
+    o = await res.json();
+    notaCache[orderId] = o;
+  }
+  const toko = await getStoreInfoCache();
+  const itemRows = o.items.map(i => `
+    <tr><td>${escapeHtml(i.product_name)}<br><small>${fmt(i.price)} × ${i.quantity}</small></td>
+    <td style="text-align:right;white-space:nowrap"><strong>${fmt(i.subtotal)}</strong></td></tr>
+  `).join('');
+  const notaHtml = `
+    <div style="text-align:center;margin-bottom:10px">
+      ${toko.logo ? `<img src="${toko.logo}" style="max-height:50px;margin-bottom:6px">` : ''}
+      <div style="font-size:18px;font-weight:800">${escapeHtml(toko.site_name)}</div>
+      <div style="font-size:11px;color:#333">${escapeHtml(toko.address)}</div>
+      <div style="font-size:11px;color:#333">Telp/WA: ${escapeHtml(toko.phone)}${toko.email ? ' • '+escapeHtml(toko.email) : ''}</div>
+    </div>
+    <div style="border-top:2px dashed #333;border-bottom:2px dashed #333;padding:8px 0;margin-bottom:8px;font-size:12px">
+      <div style="display:flex;justify-content:space-between"><span><strong>NOTA</strong> ${o.invoice}</span><span>${new Date(o.created_at).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'})}</span></div>
+      <div>Pelanggan: <strong>${escapeHtml(o.customer_name)}</strong> (${escapeHtml(o.customer_phone||'-')})</div>
+      ${o.customer_address ? `<div>Alamat: ${escapeHtml(o.customer_address)}${o.customer_city?', '+escapeHtml(o.customer_city):''}</div>` : ''}
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <tbody>${itemRows}</tbody>
+    </table>
+    <div style="border-top:1px dashed #333;margin-top:8px;padding-top:8px;font-size:12px">
+      <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
+      ${+o.ppn_amount>0?`<div style="display:flex;justify-content:space-between"><span>PPN</span><span>${fmt(o.ppn_amount)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between"><span>Ongkos Kirim${o.shipping_method?' ('+escapeHtml(o.shipping_method)+')':''}</span><span>${fmt(o.shipping_cost)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:1px dashed #333;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px"><span>Metode Bayar</span><span>${PAYMENT_LABEL[o.payment_method]||o.payment_method||'-'} • ${o.payment_status==='lunas'?'LUNAS':'BELUM LUNAS'}</span></div>
+    </div>
+    ${o.notes?`<div style="font-size:11px;margin-top:8px"><strong>Catatan:</strong> ${escapeHtml(o.notes)}</div>`:''}
+    <div style="text-align:center;margin-top:14px;font-size:11px;color:#333;border-top:1px dashed #333;padding-top:8px">
+      Terima kasih telah berbelanja 🙏<br>Barang yang sudah dibeli tidak dapat dikembalikan kecuali ada perjanjian.
+    </div>
+  `;
+  document.getElementById('notaModalContent').innerHTML = `
+    <div style="border:1px dashed var(--border);border-radius:8px;padding:14px;max-height:50vh;overflow-y:auto" id="notaPreviewBox">${notaHtml}</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('notaModal').classList.remove('open')">Tutup</button>
+      <button type="button" class="btn btn-primary" onclick="printNotaWindow()"><i class="fas fa-print"></i> Cetak / Simpan PDF</button>
+    </div>
+  `;
+  notaCurrentHtml = notaHtml;
+  notaCurrentInvoice = o.invoice;
+  document.getElementById('notaModal').classList.add('open');
+}
+let notaCurrentHtml = '';
+let notaCurrentInvoice = '';
+function printNotaWindow() {
+  printHtmlDocument(`Nota ${notaCurrentInvoice}`, `
+    <div class="nota">${notaCurrentHtml}</div>
+  `, '');
+}
+
+// Cache info toko untuk nota
+let storeInfoCache = null;
+async function getStoreInfoCache() {
+  if (storeInfoCache) return storeInfoCache;
+  try {
+    storeInfoCache = await (await fetch('/api/settings')).json();
+  } catch(e) {
+    storeInfoCache = { site_name:'Toko Tri Jaya', address:'', phone:'', email:'', logo:'' };
+  }
+  return storeInfoCache;
 }
 
 // ===== Piutang (order dengan payment_status pending) =====
@@ -1961,12 +2133,58 @@ async function changePassword() {
 // Reports
 // ===== TAB SWITCHING (Laporan) =====
 function switchReportTab(tab) {
-  ['keuangan','pajak'].forEach(t => {
-    document.getElementById('reportTab-'+t).classList.toggle('hidden', t !== tab);
-    document.getElementById('tabBtn-'+t).classList.toggle('active', t === tab);
+  ['keuangan','biaya','pajak'].forEach(t => {
+    const el = document.getElementById('reportTab-'+t);
+    if (el) el.classList.toggle('hidden', t !== tab);
+    const btn = document.getElementById('tabBtn-'+t);
+    if (btn) btn.classList.toggle('active', t === tab);
   });
   if (tab === 'keuangan') loadFinanceReport();
+  if (tab === 'biaya') loadExpenses();
   if (tab === 'pajak') loadTax();
+}
+
+// ===== BIAYA OPERASIONAL =====
+let lastExpensesData = null;
+async function loadExpenses() {
+  const data = await (await fetch('/api/admin/expenses')).json();
+  lastExpensesData = data;
+  document.getElementById('expenseStatsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-icon red"><i class="fas fa-money-bill-wave"></i></div><div><div class="stat-label">Total Biaya Bulan Ini</div><div class="stat-value" style="font-size:1.2rem">${fmt(data.total_this_month)}</div></div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-list"></i></div><div><div class="stat-label">Jumlah Catatan</div><div class="stat-value" style="font-size:1.2rem">${data.expenses.length}</div></div></div>
+  `;
+  document.getElementById('expenseTable').innerHTML = data.expenses.map(x => `
+    <tr>
+      <td>${new Date(x.expense_date).toLocaleDateString('id-ID')}</td>
+      <td><strong>${escapeHtml(x.description)}</strong></td>
+      <td>${escapeHtml(x.category||'-')}</td>
+      <td><strong>${fmt(x.amount)}</strong></td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteExpense(${x.id})"><i class="fas fa-trash"></i></button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px">Belum ada biaya tercatat. Klik "Tambah Biaya" untuk mencatat biaya operasional seperti listrik, sewa, atau gaji — biaya ini otomatis mengurangi laba bersih.</td></tr>';
+}
+function openExpenseModal() {
+  document.getElementById('expenseDesc').value = '';
+  document.getElementById('expenseAmount').value = '';
+  document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('expenseCategory').value = 'operasional';
+  document.getElementById('expenseModal').classList.add('open');
+}
+async function saveExpense() {
+  const description = document.getElementById('expenseDesc').value.trim();
+  const amount = document.getElementById('expenseAmount').value;
+  if (!description) return alert('Keterangan biaya wajib diisi');
+  if (!amount || Number(amount) <= 0) return alert('Nominal biaya tidak valid');
+  const res = await fetch('/api/admin/expenses', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ description, amount: Number(amount), category: document.getElementById('expenseCategory').value, expense_date: document.getElementById('expenseDate').value }) });
+  const d = await res.json();
+  if (!d.success) return alert(d.error);
+  document.getElementById('expenseModal').classList.remove('open');
+  loadExpenses();
+}
+async function deleteExpense(id) {
+  if (!confirm('Hapus catatan biaya ini?')) return;
+  await fetch(`/api/admin/expenses/${id}`, { method:'DELETE' });
+  loadExpenses();
 }
 
 // ===== LAPORAN KEUANGAN =====
@@ -1975,31 +2193,34 @@ async function loadFinanceReport() {
   const finance = await (await fetch('/api/admin/dashboard/finance')).json();
   lastFinanceData = finance;
   document.getElementById('financeStatsGrid').innerHTML = `
-    <div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div><div class="stat-label">Omzet</div><div class="stat-value">${fmt(finance.omzet)}</div></div></div>
+    <div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div><div class="stat-label">Omzet (30 hari, order online + kasir)</div><div class="stat-value">${fmt(finance.omzet)}</div></div></div>
     <div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-coins"></i></div><div><div class="stat-label">Laba Kotor</div><div class="stat-value">${fmt(finance.labaKotor)}</div></div></div>
     <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-money-bill-wave"></i></div><div><div class="stat-label">Laba Bersih</div><div class="stat-value">${fmt(finance.labaBersih)}</div></div></div>
-    <div class="stat-card"><div class="stat-icon red"><i class="fas fa-boxes"></i></div><div><div class="stat-label">Nilai Persediaan</div><div class="stat-value">${fmt(finance.nilaiPersediaan)}</div></div></div>
+    <div class="stat-card"><div class="stat-icon red"><i class="fas fa-boxes"></i></div><div><div class="stat-label">Nilai Persediaan (modal)</div><div class="stat-value">${fmt(finance.nilaiPersediaan)}</div></div></div>
   `;
   document.getElementById('financeDetailContent').innerHTML = `
     <h3 style="margin-bottom:14px;color:var(--primary)">Ringkasan 30 Hari Terakhir</h3>
     <div style="font-size:.9rem;line-height:2">
       <div style="display:flex;justify-content:space-between"><span>Pendapatan (Omzet)</span><strong>${fmt(finance.omzet)}</strong></div>
-      <div style="display:flex;justify-content:space-between;color:var(--muted)"><span>Harga Pokok Penjualan (HPP)</span><span>${fmt(finance.omzet - finance.labaKotor)}</span></div>
-      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px"><span>Laba Kotor</span><strong>${fmt(finance.labaKotor)}</strong></div>
-      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px;margin-top:6px;font-size:1rem"><span><strong>Laba Bersih</strong></span><strong style="color:var(--accent)">${fmt(finance.labaBersih)}</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-top:14px"><span>Nilai Persediaan (Aset Stok Saat Ini)</span><strong>${fmt(finance.nilaiPersediaan)}</strong></div>
+      <div style="display:flex;justify-content:space-between;color:var(--muted)"><span>Harga Pokok Penjualan (HPP)</span><span>-${fmt(finance.hpp)}</span></div>
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px"><span>Laba Kotor (Omzet − HPP)</span><strong>${fmt(finance.labaKotor)}</strong></div>
+      <div style="display:flex;justify-content:space-between;color:var(--muted)"><span>Biaya Operasional</span><span>-${fmt(finance.biayaOperasional)}</span></div>
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px;margin-top:6px;font-size:1rem"><span><strong>Laba Bersih (Laba Kotor − Biaya)</strong></span><strong style="color:var(--accent)">${fmt(finance.labaBersih)}</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-top:14px"><span>Nilai Persediaan (Aset Stok Saat Ini, dihitung dari modal)</span><strong>${fmt(finance.nilaiPersediaan)}</strong></div>
     </div>
+    <p style="margin-top:14px;color:var(--muted);font-size:.8rem"><i class="fas fa-info-circle"></i> HPP dihitung dari <strong>Harga Modal (HPP)</strong> yang diisi di menu Produk, serta otomatis ter-update dari harga beli supplier saat pembelian diterima. Penjualan kasir juga ikut dihitung. Isi <strong>Biaya Operasional</strong> di tab sebelah agar Laba Bersih makin akurat.</p>
   `;
 }
 function printFinanceReport() {
   const f = lastFinanceData;
   if (!f) return alert('Data belum dimuat, coba muat ulang dulu.');
-  openPrintWindow('Laporan Keuangan', `
+  printHtmlDocument('Laporan Keuangan', `
     <table>
       <tbody>
         <tr><td>Omzet (Pendapatan)</td><td style="text-align:right">${fmt(f.omzet)}</td></tr>
-        <tr><td>Harga Pokok Penjualan (HPP)</td><td style="text-align:right">${fmt(f.omzet - f.labaKotor)}</td></tr>
+        <tr><td>Harga Pokok Penjualan (HPP)</td><td style="text-align:right">-${fmt(f.hpp)}</td></tr>
         <tr><td><strong>Laba Kotor</strong></td><td style="text-align:right"><strong>${fmt(f.labaKotor)}</strong></td></tr>
+        <tr><td>Biaya Operasional</td><td style="text-align:right">-${fmt(f.biayaOperasional)}</td></tr>
         <tr><td><strong>Laba Bersih</strong></td><td style="text-align:right"><strong>${fmt(f.labaBersih)}</strong></td></tr>
         <tr><td>Nilai Persediaan (Aset Stok)</td><td style="text-align:right">${fmt(f.nilaiPersediaan)}</td></tr>
       </tbody>
@@ -2009,30 +2230,50 @@ function printFinanceReport() {
 function printTaxReport() {
   const content = document.getElementById('taxContent').innerHTML;
   if (!content.trim()) return alert('Data pajak belum dimuat.');
-  openPrintWindow('Laporan Pajak', `<div>${content}</div>`);
+  // Buang elemen interaktif (select dsb.) yang tidak relevan di kertas
+  const clean = content.replace(/<select[^>]*>.*?<\/select>/gs, '').replace(/<button[^>]*>.*?<\/button>/gs, '');
+  printHtmlDocument('Laporan Pajak', `<div>${clean}</div>`);
 }
 
-function openPrintWindow(title, bodyHtml, subtitle) {
-  const win = window.open('', '_blank');
-  win.document.write(`
-    <html><head><title>${title} - Toko Tri Jaya</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:30px;color:#111}
-      h1{font-size:20px;margin-bottom:2px}
-      .sub{color:#555;font-size:13px;margin-bottom:20px}
-      table{width:100%;border-collapse:collapse;margin-top:10px}
-      th,td{border:1px solid #ccc;padding:7px 8px;font-size:12px;text-align:left}
-      th{background:#f3f4f6}
-      .totals{margin-top:16px;text-align:right;font-size:14px;font-weight:bold}
-      @media print{ .no-print{display:none} }
-    </style></head><body>
-    <h1>Toko Tri Jaya — ${title}</h1>
-    <div class="sub">${subtitle || ''} ${subtitle ? '&nbsp;|&nbsp;' : ''} Dicetak: ${new Date().toLocaleString('id-ID')}</div>
-    ${bodyHtml}
-    <script>window.onload = () => window.print();<\/script>
-    </body></html>
-  `);
-  win.document.close();
+// ===== MESIN CETAK / UNDUAH PDF (anti popup-blocker) =====
+// Pakai iframe tersembunyi di halaman yang sama, jadi tidak diblokir popup blocker
+// dan langsung membuka dialog print (bisa pilih "Save as PDF" atau printer Canon dsb.)
+function printHtmlDocument(title, bodyHtml, subtitle) {
+  let iframe = document.getElementById('__printFrame');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = '__printFrame';
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+    document.body.appendChild(iframe);
+  }
+  const html = `<!DOCTYPE html>
+  <html><head><meta charset="UTF-8"><title>${title} - Toko Tri Jaya</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:24px;color:#111;margin:0}
+    h1{font-size:20px;margin-bottom:2px}
+    .sub{color:#555;font-size:12px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{border:1px solid #ccc;padding:7px 8px;font-size:12px;text-align:left}
+    th{background:#f3f4f6}
+    .totals{margin-top:16px;text-align:right;font-size:14px;font-weight:bold}
+    .nota{max-width:420px;margin:0 auto;font-size:12px}
+    .nota table td{border:none;padding:2px 0}
+    @media print{ .no-print{display:none} @page{margin:12mm} }
+  </style></head><body>
+  <h1>Toko Tri Jaya — ${title}</h1>
+  <div class="sub">${subtitle || ''} ${subtitle ? '&nbsp;|&nbsp;' : ''} Dicetak: ${new Date().toLocaleString('id-ID')}</div>
+  ${bodyHtml}
+  </body></html>`;
+  iframe.srcdoc = html;
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch(e) {
+      console.error('Gagal membuka dialog cetak:', e);
+      alert('Gagal membuka dialog cetak. Coba izinkan popup untuk situs ini lalu ulangi.');
+    }
+  };
 }
 
 // Tax

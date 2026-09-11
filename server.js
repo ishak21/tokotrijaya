@@ -204,6 +204,14 @@ db.exec(`
     FOREIGN KEY (sale_id) REFERENCES cashier_sales(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
   );
+  CREATE TABLE IF NOT EXISTS expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    description TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    category TEXT DEFAULT 'operasional',
+    expense_date DATE DEFAULT CURRENT_DATE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // ===== MIGRASI: tambah kolom baru untuk database lama tanpa hapus data =====
@@ -213,6 +221,13 @@ if (!productCols.includes('sku')) {
 }
 if (!productCols.includes('low_stock_threshold')) {
   db.exec('ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5');
+}
+if (!productCols.includes('cost_price')) {
+  db.exec('ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0');
+}
+const poCols = db.prepare("PRAGMA table_info(purchase_orders)").all().map(c => c.name);
+if (!poCols.includes('received_at')) {
+  db.exec('ALTER TABLE purchase_orders ADD COLUMN received_at DATETIME');
 }
 const poItemCols = db.prepare("PRAGMA table_info(purchase_order_items)").all().map(c => c.name);
 if (!poItemCols.includes('product_id')) {
@@ -494,7 +509,6 @@ app.get('/api/admin/products', requireAdmin, (req, res) => {
   else if (status === 'inactive') where += ' AND is_active=0';
   else if (status === 'low') where += ' AND stock<=low_stock_threshold AND stock>0';
   else if (status === 'out') where += ' AND stock<=0';
-
   const sortMap = {
     created_desc: 'created_at DESC',
     created_asc: 'created_at ASC',
@@ -515,11 +529,11 @@ app.get('/api/admin/products', requireAdmin, (req, res) => {
 });
 
 app.post('/api/admin/products', requireAdmin, (req, res) => {
-  const { name, description, price, stock, category, weight, image, sku, low_stock_threshold } = req.body;
+  const { name, description, price, stock, category, weight, image, sku, low_stock_threshold, cost_price } = req.body;
   if (!name) return res.status(400).json({ error: 'Nama produk wajib diisi' });
   try {
-    const r = db.prepare('INSERT INTO products (name,description,price,stock,category,weight,image,sku,low_stock_threshold) VALUES (?,?,?,?,?,?,?,?,?)')
-      .run(name, description||'', +price||0, +stock||0, category||'', +weight||0, image||'', sku||null, +low_stock_threshold||5);
+    const r = db.prepare('INSERT INTO products (name,description,price,stock,category,weight,image,sku,low_stock_threshold,cost_price) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(name, description||'', +price||0, +stock||0, category||'', +weight||0, image||'', sku||null, +low_stock_threshold||5, +cost_price||0);
     res.json({ success: true, id: r.lastInsertRowid });
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return res.status(400).json({ error: 'SKU sudah dipakai produk lain' });
@@ -528,10 +542,10 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
 });
 
 app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
-  const { name, description, price, stock, category, weight, image, is_active, sku, low_stock_threshold } = req.body;
+  const { name, description, price, stock, category, weight, image, is_active, sku, low_stock_threshold, cost_price } = req.body;
   try {
-    db.prepare('UPDATE products SET name=?,description=?,price=?,stock=?,category=?,weight=?,image=?,is_active=?,sku=?,low_stock_threshold=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
-      .run(name, description||'', +price||0, +stock||0, category||'', +weight||0, image||'', is_active!==undefined?(is_active?1:0):1, sku||null, +low_stock_threshold||5, +req.params.id);
+    db.prepare('UPDATE products SET name=?,description=?,price=?,stock=?,category=?,weight=?,image=?,is_active=?,sku=?,low_stock_threshold=?,cost_price=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
+      .run(name, description||'', +price||0, +stock||0, category||'', +weight||0, image||'', is_active!==undefined?(is_active?1:0):1, sku||null, +low_stock_threshold||5, +cost_price||0, +req.params.id);
     res.json({ success: true });
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return res.status(400).json({ error: 'SKU sudah dipakai produk lain' });
@@ -616,10 +630,10 @@ app.post('/api/admin/products/import', requireAdmin, uploadCsv.single('file'), (
 
 // Export semua produk sebagai CSV (untuk backup / edit massal offline)
 app.get('/api/admin/products/export', requireAdmin, (req, res) => {
-  const rows = db.prepare('SELECT name,description,price,stock,category,weight,sku,low_stock_threshold FROM products ORDER BY created_at DESC').all();
+  const rows = db.prepare('SELECT name,description,price,cost_price,stock,category,weight,sku,low_stock_threshold FROM products ORDER BY created_at DESC').all();
   const esc = (v) => `"${String(v??'').replace(/"/g,'""')}"`;
-  const header = 'name,description,price,stock,category,weight,sku,low_stock_threshold';
-  const csv = [header, ...rows.map(r => [r.name,r.description,r.price,r.stock,r.category,r.weight,r.sku,r.low_stock_threshold].map(esc).join(','))].join('\n');
+  const header = 'name,description,price,cost_price,stock,category,weight,sku,low_stock_threshold';
+  const csv = [header, ...rows.map(r => [r.name,r.description,r.price,r.cost_price,r.stock,r.category,r.weight,r.sku,r.low_stock_threshold].map(esc).join(','))].join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="produk-export.csv"');
   res.send('\uFEFF' + csv); // BOM biar Excel baca UTF-8 dengan benar
@@ -778,6 +792,11 @@ app.put('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
     items.forEach(i => db.prepare('UPDATE products SET stock=stock+? WHERE id=?').run(i.quantity, i.product_id));
   }
   res.json({ success: true });
+});
+
+// ===== SETTINGS (Public — dibutuhkan index.html & admin.html) =====
+app.get('/api/settings', (req, res) => {
+  res.json(getSettings());
 });
 
 // ===== BANK ACCOUNTS =====
@@ -1094,37 +1113,72 @@ app.get('/api/admin/dashboard/stats', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/dashboard/finance', requireAdmin, (req, res) => {
-  // Calculate from existing data
-  const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];
 
-  // Revenue (ompzet) - total sales last 30 days
-  const revenue = db.prepare(`SELECT COALESCE(SUM(total),0) as total FROM orders WHERE created_at>=? AND status!='cancelled'`).get(thirtyDaysAgo).total;
+  // === OMZET: gabungan order online + penjualan kasir (30 hari) ===
+  const onlineRevenue = db.prepare(`SELECT COALESCE(SUM(subtotal),0) as total FROM orders WHERE created_at>=? AND status!='cancelled'`).get(thirtyDaysAgo).total;
+  const kasirRevenue = db.prepare(`SELECT COALESCE(SUM(subtotal),0) as total FROM cashier_sales WHERE created_at>=? AND status!='void'`).get(thirtyDaysAgo).total;
+  const revenue = onlineRevenue + kasirRevenue;
 
-  // Cost of goods sold (estimated from products)
-  const orders = db.prepare(`SELECT oi.product_id, oi.quantity FROM order_items oi JOIN orders o ON oi.order_id=o.id WHERE o.created_at>=? AND o.status!='cancelled'`).all(thirtyDaysAgo);
+  // === HPP (Harga Pokok Penjualan) berdasarkan cost_price produk ===
+  // Order online: pakai item historis (harga & produk saat order dibuat)
+  const onlineItems = db.prepare(`SELECT oi.product_id, oi.product_name, oi.quantity, oi.price FROM order_items oi JOIN orders o ON oi.order_id=o.id WHERE o.created_at>=? AND o.status!='cancelled'`).all(thirtyDaysAgo);
+  // Kasir: sama, item historis
+  const kasirItems = db.prepare(`SELECT csi.product_id, csi.product_name, csi.quantity, csi.price FROM cashier_sale_items csi JOIN cashier_sales cs ON csi.sale_id=cs.id WHERE cs.created_at>=? AND cs.status!='void'`).all(thirtyDaysAgo);
+
+  const costByName = (name) => db.prepare('SELECT cost_price FROM products WHERE name=?').get(name);
+  const costById = (id) => db.prepare('SELECT cost_price FROM products WHERE id=?').get(id);
   let cogs = 0;
-  for (const o of orders) {
-    const prod = db.prepare('SELECT price FROM products WHERE id=?').get(o.product_id);
-    if (prod) cogs += prod.price * o.quantity;
+  for (const it of [...onlineItems, ...kasirItems]) {
+    // Prioritas: cari modal berdasarkan product_id; fallback ke nama produk
+    const prod = (it.product_id != null && costById(it.product_id)) || costByName(it.product_name);
+    const modal = (prod && +prod.cost_price > 0) ? +prod.cost_price : 0;
+    // Kalau modal belum diisi, fallback estimasi 70% dari harga jual
+    cogs += (modal || it.price * 0.7) * it.quantity;
   }
 
-  const grossProfit = revenue - cogs;
-  // For simplicity, net profit = gross profit (no other expenses tracked)
-  const netProfit = grossProfit;
-  const cashFlow = revenue; // Cash in from sales
+  // === BIAYA OPERASIONAL (tabel expenses) ===
+  const expensesTotal = db.prepare(`SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE expense_date>=?`).get(thirtyDaysAgo).total;
 
-  // Inventory value
-  const inventory = db.prepare(`SELECT COALESCE(SUM(price * stock),0) as value FROM products`).get();
+  const grossProfit = revenue - cogs;
+  const netProfit = grossProfit - expensesTotal;
+  const cashFlow = revenue - expensesTotal;
+
+  // Nilai persediaan memakai cost_price (modal), bukan harga jual
+  const inventory = db.prepare(`SELECT COALESCE(SUM(COALESCE(NULLIF(cost_price,0), price) * stock),0) as value FROM products`).get();
 
   res.json({
     omzet: revenue,
+    hpp: cogs,
+    biayaOperasional: expensesTotal,
     labaKotor: grossProfit,
     labaBersih: netProfit,
     arusKas: cashFlow,
     nilaiPersediaan: inventory.value,
-    posisiBersih: revenue - cogs + inventory.value
+    posisiBersih: netProfit + inventory.value
   });
+});
+
+// ===== BIAYA OPERASIONAL (untuk laba bersih) =====
+app.get('/api/admin/expenses', requireAdmin, (req, res) => {
+  const rows = db.prepare('SELECT * FROM expenses ORDER BY expense_date DESC, id DESC LIMIT 200').all();
+  const total = db.prepare("SELECT COALESCE(SUM(amount),0) as t FROM expenses WHERE strftime('%Y-%m', expense_date)=strftime('%Y-%m','now')").get().t;
+  res.json({ expenses: rows, total_this_month: total });
+});
+
+app.post('/api/admin/expenses', requireAdmin, (req, res) => {
+  const { description, amount, category, expense_date } = req.body;
+  if (!description || !description.trim()) return res.status(400).json({ error: 'Keterangan biaya wajib diisi' });
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'Nominal biaya tidak valid' });
+  const r = db.prepare('INSERT INTO expenses (description,amount,category,expense_date) VALUES (?,?,?,?)')
+    .run(description.trim(), amt, category || 'operasional', expense_date || new Date().toISOString().split('T')[0]);
+  res.json({ success: true, id: r.lastInsertRowid });
+});
+
+app.delete('/api/admin/expenses/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM expenses WHERE id=?').run(+req.params.id);
+  res.json({ success: true });
 });
 
 app.get('/api/admin/dashboard/products', requireAdmin, (req, res) => {
@@ -1213,11 +1267,40 @@ app.post('/api/admin/purchases/:id/receive', requireAdmin, (req, res) => {
 
   const items = db.prepare('SELECT * FROM purchase_order_items WHERE po_id=?').all(po.id);
   const updStock = db.prepare('UPDATE products SET stock=stock+?,updated_at=CURRENT_TIMESTAMP WHERE id=?');
+  const updCost = db.prepare('UPDATE products SET cost_price=? WHERE id=?');
+  const updatedItems = [];
   const receive = db.transaction(() => {
-    items.forEach(i => { if (i.product_id) updStock.run(i.quantity, i.product_id); });
-    db.prepare("UPDATE purchase_orders SET status='received',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(po.id);
+    items.forEach(i => {
+      if (!i.product_id) return;
+      const prod = db.prepare('SELECT stock FROM products WHERE id=?').get(i.product_id);
+      if (!prod) return;
+      updStock.run(i.quantity, i.product_id);
+      // Update modal terakhir (HPP) dari harga beli supplier — hanya jika > 0
+      if (+i.unit_cost > 0) updCost.run(+i.unit_cost, i.product_id);
+      updatedItems.push({ product_id: i.product_id, name: i.product_name, qty: i.quantity, stock_before: prod.stock, stock_after: prod.stock + i.quantity });
+    });
+    db.prepare("UPDATE purchase_orders SET status='received',received_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(po.id);
   });
   receive();
+  res.json({ success: true, updated_items: updatedItems.length, items: updatedItems });
+});
+
+// Tambah item produk ke PO yang belum diterima (menghubungkan pembelian lama ke produk)
+app.post('/api/admin/purchases/:id/items', requireAdmin, (req, res) => {
+  const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(+req.params.id);
+  if (!po) return res.status(404).json({ error: 'Pembelian tidak ditemukan' });
+  if (po.status === 'received') return res.status(400).json({ error: 'Pembelian sudah diterima, tidak bisa ditambah item' });
+  const { product_id, quantity, unit_cost } = req.body;
+  const prod = db.prepare('SELECT * FROM products WHERE id=?').get(+product_id);
+  if (!prod) return res.status(400).json({ error: 'Produk tidak ditemukan' });
+  const qty = Number(quantity), cost = Number(unit_cost);
+  if (!Number.isInteger(qty) || qty < 1 || !Number.isFinite(cost) || cost < 0) return res.status(400).json({ error: 'Qty / harga tidak valid' });
+  const tx = db.transaction(() => {
+    db.prepare('INSERT INTO purchase_order_items (po_id,product_id,product_name,quantity,unit_cost,subtotal) VALUES (?,?,?,?,?,?)')
+      .run(po.id, prod.id, prod.name, qty, cost, qty*cost);
+    db.prepare('UPDATE purchase_orders SET total_amount=total_amount+?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(qty*cost, po.id);
+  });
+  tx();
   res.json({ success: true });
 });
 
