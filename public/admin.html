@@ -1836,7 +1836,7 @@ async function loadPurchases() {
     <tr>
       <td><strong>${po.po_number}</strong></td>
       <td>${escapeHtml(po.supplier_name)}</td>
-      <td>${po.item_count} item</td>
+      <td>${(po.total_qty != null ? po.total_qty : po.item_count)} item</td>
       <td>${fmt(po.total_amount)}</td>
       <td>${PO_STATUS_LABEL[po.status] || po.status}</td>
       <td>${new Date(po.created_at).toLocaleDateString('id-ID')}</td>
@@ -1845,7 +1845,7 @@ async function loadPurchases() {
         <button class="btn btn-sm btn-outline" onclick="printPurchaseNota(${po.id})" title="Cetak Nota Pembelian"><i class="fas fa-print"></i></button>
         ${po.status==='pending' ? `<button class="btn btn-sm btn-primary" onclick="receivePurchase(${po.id})" title="Terima Barang"><i class="fas fa-check"></i></button>
         <button class="btn btn-sm btn-outline" onclick="cancelPurchase(${po.id})" title="Batalkan"><i class="fas fa-ban"></i></button>` : ''}
-        ${po.status!=='received' ? `<button class="btn btn-sm btn-danger" onclick="deletePurchase(${po.id})" title="Hapus"><i class="fas fa-trash"></i></button>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="deletePurchase(${po.id})" title="Hapus Pembelian"><i class="fas fa-trash"></i></button>
       </td>
     </tr>
   `).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Belum ada pembelian. Klik "Buat Pembelian" untuk mencatat pembelian barang dari supplier.</td></tr>';
@@ -1962,8 +1962,8 @@ function addPoItemRow() {
   el.innerHTML = `
     <select id="poItemProduct${idx}" style="flex:2;min-width:170px" onchange="onPoProductChange(${idx})">${poProductOptions()}</select>
     <input placeholder="Nama barang baru (kosongkan jika pilih dropdown)" id="poItemName${idx}" style="flex:2;min-width:150px" oninput="calcPoTotal()">
-    <input type="number" placeholder="Qty" min="1" value="1" id="poItemQty${idx}" style="width:60px" oninput="calcPoTotal()">
-    <input type="number" placeholder="Harga supplier/pcs" min="0" id="poItemCost${idx}" style="width:130px" oninput="calcPoTotal()" title="Harga beli dari supplier per pcs">
+    <input type="number" placeholder="Qty" min="1" step="1" value="1" id="poItemQty${idx}" style="width:70px" oninput="calcPoTotal()" title="Jumlah yang dibeli, contoh: 1000">
+    <input type="text" inputmode="numeric" placeholder="Harga supplier/pcs (mis. 60.000)" id="poItemCost${idx}" style="width:150px" oninput="calcPoTotal()" title="Harga beli dari supplier per pcs. Boleh ketik: 60000, 60.000, atau 60rb">
     <input type="number" placeholder="Harga jual/pcs" min="0" id="poItemSale${idx}" style="width:120px" title="Harga jual — otomatis terhubung ke harga produk">
     <button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('poItemRow${idx}').remove();calcPoTotal()"><i class="fas fa-trash"></i></button>
   `;
@@ -1988,11 +1988,21 @@ function onPoProductChange(idx) {
   }
   calcPoTotal();
 }
+// Harga bisa diketik bebas: 60000, 60.000, 60,000, Rp 60.000, 60rb, 60 ribu, 60k — semua dibaca 60000
+function parsePoPrice(val) {
+  if (typeof val !== 'string') return Number(val) || 0;
+  let s = String(val).toLowerCase().replace(/\s+/g, '');
+  let mult = 1;
+  if (/(rb|ribu|k)$/.test(s)) { mult = 1000; s = s.replace(/(rb|ribu|k)$/, ''); }
+  else if (/(jt|juta)$/.test(s)) { mult = 1000000; s = s.replace(/(jt|juta)$/, ''); }
+  const num = Number(s.replace(/[^0-9.,-]/g, '').replace(/\./g, '').replace(/,/g, ''));
+  return (Number.isFinite(num) ? num : 0) * mult;
+}
 function calcPoTotal() {
   let total = 0;
   for (let i=0;i<poItemCount;i++) {
     const qtyEl = document.getElementById('poItemQty'+i), costEl = document.getElementById('poItemCost'+i);
-    if (qtyEl && costEl) total += (Number(qtyEl.value)||0) * (Number(costEl.value)||0);
+    if (qtyEl && costEl) total += (Number(qtyEl.value)||0) * parsePoPrice(costEl.value);
   }
   document.getElementById('poTotal').textContent = fmt(total);
 }
@@ -2006,7 +2016,7 @@ async function savePurchase() {
     if (!sel) continue;
     const nameEl = document.getElementById('poItemName'+i);
     const qty = Number(document.getElementById('poItemQty'+i).value);
-    const cost = Number(document.getElementById('poItemCost'+i).value);
+    const cost = parsePoPrice(document.getElementById('poItemCost'+i).value);
     const saleRaw = Number(document.getElementById('poItemSale'+i).value);
     const sale = Number.isFinite(saleRaw) && saleRaw > 0 ? saleRaw : 0;
     const newName = (nameEl?.value || '').trim();

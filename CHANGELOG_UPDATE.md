@@ -4,6 +4,15 @@ Ringkasan semua perubahan pada paket ini dibanding yang Anda upload sebelumnya.
 
 ---
 
+## 🔧 Update Terbaru (12 September 2026) — Perbaikan Menu Pembelian
+
+1. **Kolom Harga Supplier/pcs sekarang fleksibel** — boleh ketik `60000`, `60.000`, `60,000`, `Rp 60.000`, bahkan `60rb` / `60 ribu` / `60k`. Semua terbaca Rp 60.000. Total langsung dihitung otomatis = jumlah pcs × harga (contoh: 1000 zak × Rp 60.000 = **Rp 60.000.000**).
+2. **Kolom Jumlah Item sudah benar** — sebelumnya menulis "1 item" padahal beli 1000 zak. Sekarang yang ditampilkan adalah **total qty yang dibeli** (1000 item). Tetap ada detail jumlah baris item di modal detail.
+3. **Tombol Hapus (🗑) selalu tersedia di kolom Aksi** — sebelumnya hilang setelah barang diterima (tombol print preview & print sudah ada, tinggal tambah hapus). Menghapus PO yang sudah diterima hanya menghapus catatan pembelian — stok & produk tidak diubah.
+4. ✅ Diverifikasi end-to-end: buat PO 1000 zak @ 60.000 → list menunjukkan `total_qty: 1000` dan `total: Rp 60.000.000` → hapus PO → sukses.
+
+---
+
 ## 🔴 Bug Fixes (dari review sebelumnya)
 
 1. **Laporan Keuangan crash** — parameter query salah taruh di `db.prepare()`, sudah dipindah ke `.all()`. ✅ Diverifikasi 200 OK.

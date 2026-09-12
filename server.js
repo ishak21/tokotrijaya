@@ -1230,7 +1230,11 @@ app.get('/api/admin/purchases', requireAdmin, (req, res) => {
   const { status = '' } = req.query;
   let where = 'WHERE 1=1'; const p = [];
   if (status) { where += ' AND status=?'; p.push(status); }
-  const rows = db.prepare(`SELECT po.*, (SELECT COUNT(*) FROM purchase_order_items WHERE po_id=po.id) as item_count FROM purchase_orders po ${where} ORDER BY created_at DESC`).all(...p);
+  // item_count = jumlah BARIS item, total_qty = jumlah barang yang dibeli (hasil penjumlahan semua qty)
+  const rows = db.prepare(`SELECT po.*,
+    (SELECT COUNT(*) FROM purchase_order_items WHERE po_id=po.id) as item_count,
+    (SELECT COALESCE(SUM(quantity),0) FROM purchase_order_items WHERE po_id=po.id) as total_qty
+    FROM purchase_orders po ${where} ORDER BY created_at DESC`).all(...p);
   res.json(rows);
 });
 
@@ -1361,8 +1365,13 @@ app.put('/api/admin/purchases/:id/cancel', requireAdmin, (req, res) => {
 app.delete('/api/admin/purchases/:id', requireAdmin, (req, res) => {
   const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(+req.params.id);
   if (!po) return res.status(404).json({ error: 'Pembelian tidak ditemukan' });
-  if (po.status === 'received') return res.status(400).json({ error: 'Pembelian yang sudah diterima tidak bisa dihapus' });
-  db.prepare('DELETE FROM purchase_orders WHERE id=?').run(po.id);
+  // Boleh hapus semua status (termasuk yang sudah diterima — stok tidak diubah,
+  // ini hanya menghapus catatan pembelian). Item ikut terhapus otomatis (ON DELETE CASCADE).
+  const del = db.transaction(() => {
+    db.prepare('DELETE FROM purchase_order_items WHERE po_id=?').run(po.id);
+    db.prepare('DELETE FROM purchase_orders WHERE id=?').run(po.id);
+  });
+  del();
   res.json({ success: true });
 });
 
