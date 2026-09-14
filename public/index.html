@@ -822,13 +822,14 @@ async function loadCouriersForCheckout() {
     const res = await fetch('/api/couriers');
     couriersData = await res.json();
     const shipEl = document.getElementById('shippingOptions');
+    const ownDeliveryOption = `<button type="button" class="shipping-opt" onclick="selectShipping('Kirim oleh Toko',0,this)"><i class="fas fa-store"></i> Kirim oleh Toko - Gratis</button>`;
     if (couriersData.length > 0) {
-      shipEl.innerHTML = couriersData.map(c => 
+      shipEl.innerHTML = ownDeliveryOption + couriersData.map(c =>
         `<button type="button" class="shipping-opt" onclick="selectShipping('${c.name}',${c.base_cost},this)">${c.name} - ${fmt(c.base_cost)}</button>`
       ).join('');
     } else {
       // Fallback to flat rate
-      shipEl.innerHTML = `<button type="button" class="shipping-opt" onclick="selectShipping('Reguler',${settings.ship_flat_rate||15000},this)">Reguler - ${fmt(settings.ship_flat_rate||15000)}</button>`;
+      shipEl.innerHTML = ownDeliveryOption + `<button type="button" class="shipping-opt" onclick="selectShipping('Reguler',${settings.ship_flat_rate||15000},this)">Reguler - ${fmt(settings.ship_flat_rate||15000)}</button>`;
     }
   } catch(e) {
     console.error('Gagal load kurir:', e);
