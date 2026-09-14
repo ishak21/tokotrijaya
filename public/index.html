@@ -168,7 +168,10 @@ button{cursor:pointer;font-family:var(--font-b);border:none;outline:none}
 .cart-qty{display:flex;align-items:center;gap:8px}
 .qty-btn{width:28px;height:28px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);display:grid;place-items:center;font-size:.75rem;transition:.2s;color:var(--text)}
 .qty-btn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-light)}
-.qty-val{font-weight:600;font-size:.88rem;min-width:20px;text-align:center}
+.qty-input{width:52px;height:28px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-weight:600;font-size:.88rem;text-align:center;outline:none}
+.qty-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(15,42,37,.08)}
+.qty-input::-webkit-outer-spin-button,.qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.qty-input[type=number]{-moz-appearance:textfield}
 .cart-item-remove{background:none;color:var(--muted);font-size:.9rem;padding:4px;transition:.2s;align-self:flex-start;border-radius:var(--radius-sm)}
 .cart-item-remove:hover{color:var(--danger);background:#fef2f2}
 .cart-footer{padding:16px 24px;border-top:1px solid var(--border);background:var(--bg)}
@@ -532,6 +535,7 @@ let selectedPaymentType = '';
 let selectedPaymentDetail = '';
 let selectedShipping = '';
 let shippingCost = 0;
+let lastOrderInvoice = '';
 
 const fmt = n => 'Rp ' + Number(n).toLocaleString('id-ID');
 
@@ -718,6 +722,20 @@ function updateQty(productId, delta) {
   updateCartUI();
 }
 
+function updateQtyInput(productId, value) {
+  const item = cart.find(c => c.product_id === productId);
+  if (!item) return;
+  let quantity = Number.parseInt(value, 10);
+  if (!Number.isFinite(quantity) || quantity < 1) quantity = 1;
+  if (quantity > item.maxStock) {
+    quantity = item.maxStock;
+    toast('Maksimal stok tercapai');
+  }
+  item.quantity = quantity;
+  saveCart();
+  updateCartUI();
+}
+
 function saveCart() {
   localStorage.setItem('ttj_cart', JSON.stringify(cart));
 }
@@ -748,7 +766,7 @@ function updateCartUI() {
         <div class="cart-item-price">${fmt(c.price)}</div>
         <div class="cart-qty">
           <button class="qty-btn" onclick="updateQty(${c.product_id},-1)"><i class="fas fa-minus"></i></button>
-          <span class="qty-val">${c.quantity}</span>
+          <input class="qty-input" type="number" min="1" max="${c.maxStock}" value="${c.quantity}" aria-label="Jumlah ${c.name}" onchange="updateQtyInput(${c.product_id},this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" />
           <button class="qty-btn" onclick="updateQty(${c.product_id},1)"><i class="fas fa-plus"></i></button>
         </div>
       </div>
@@ -893,6 +911,7 @@ async function placeOrder(e) {
 }
 
 function showSuccess(invoice, total) {
+  lastOrderInvoice = invoice;
   document.getElementById('successContent').innerHTML = `
     <div class="success-icon"><i class="fas fa-check"></i></div>
     <h2>Pesanan Berhasil!</h2>
@@ -900,12 +919,35 @@ function showSuccess(invoice, total) {
     <div class="invoice-num">${invoice}</div>
     <p>Total: <strong>${fmt(total)}</strong></p>
     <p style="font-size:.85rem;margin-top:12px">Simpan nomor invoice untuk melacak pesanan Anda.</p>
+    <button class="btn btn-outline" onclick="printCustomerNota()" style="margin-top:16px"><i class="fas fa-print"></i> Cetak Nota Belanja</button>
     <button class="btn btn-primary" onclick="closeSuccess()" style="margin-top:20px"><i class="fas fa-home"></i> Kembali Belanja</button>
   `;
   document.getElementById('successModal').classList.add('open');
 }
 
 function closeSuccess() { document.getElementById('successModal').classList.remove('open'); }
+
+function notaEscape(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+}
+
+async function printCustomerNota() {
+  if (!lastOrderInvoice) return toast('Invoice belum tersedia');
+  try {
+    const res = await fetch('/api/orders/track/' + encodeURIComponent(lastOrderInvoice));
+    if (!res.ok) throw new Error('invoice');
+    const o = await res.json();
+    const itemRows = o.items.map(i => `<tr><td>${notaEscape(i.product_name)}<br><small>${fmt(i.price)} × ${i.quantity}</small></td><td style="text-align:right;white-space:nowrap"><strong>${fmt(i.subtotal)}</strong></td></tr>`).join('');
+    const nota = `<div style="text-align:center;margin-bottom:10px">${settings.logo ? `<img src="${notaEscape(settings.logo)}" style="max-height:50px;margin-bottom:6px">` : ''}<div style="font-size:18px;font-weight:800">${notaEscape(settings.site_name || 'Toko Tri Jaya')}</div><div style="font-size:11px;color:#333">${notaEscape(settings.address || '')}</div><div style="font-size:11px;color:#333">Telp/WA: ${notaEscape(settings.phone || '')}${settings.email ? ' • '+notaEscape(settings.email) : ''}</div></div>
+      <div style="border-top:2px dashed #333;border-bottom:2px dashed #333;padding:8px 0;margin-bottom:8px;font-size:12px"><div style="display:flex;justify-content:space-between"><span><strong>NOTA</strong> ${notaEscape(o.invoice)}</span><span>${new Date(o.created_at).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'})}</span></div><div>Pelanggan: <strong>${notaEscape(o.customer_name)}</strong> (${notaEscape(o.customer_phone || '- ')})</div>${o.customer_address ? `<div>Alamat: ${notaEscape(o.customer_address)}${o.customer_city?', '+notaEscape(o.customer_city):''}</div>` : ''}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${itemRows}</tbody></table>
+      <div style="border-top:1px dashed #333;margin-top:8px;padding-top:8px;font-size:12px"><div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>${+o.ppn_amount>0?`<div style="display:flex;justify-content:space-between"><span>PPN</span><span>${fmt(o.ppn_amount)}</span></div>`:''}<div style="display:flex;justify-content:space-between"><span>Ongkos Kirim${o.shipping_method?' ('+notaEscape(o.shipping_method)+')':''}</span><span>${fmt(o.shipping_cost)}</span></div><div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:1px dashed #333;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>${fmt(o.total)}</span></div><div style="display:flex;justify-content:space-between;margin-top:4px"><span>Metode Bayar</span><span>${notaEscape(o.payment_method || '-')} • ${o.payment_status==='lunas'?'LUNAS':'BELUM LUNAS'}</span></div></div>${o.notes?`<div style="font-size:11px;margin-top:8px"><strong>Catatan:</strong> ${notaEscape(o.notes)}</div>`:''}<div style="text-align:center;margin-top:14px;font-size:11px;color:#333;border-top:1px dashed #333;padding-top:8px">Terima kasih telah berbelanja<br>Barang yang sudah dibeli tidak dapat dikembalikan kecuali ada perjanjian.</div>`;
+    const printWindow = window.open('', '_blank', 'width=480,height=700');
+    if (!printWindow) return toast('Izinkan pop-up browser untuk mencetak nota');
+    printWindow.document.write(`<!doctype html><html><head><title>Nota ${notaEscape(o.invoice)}</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#111}.nota{max-width:420px;margin:0 auto;font-size:12px}.nota table td{border:none;padding:2px 0}@media print{@page{margin:12mm}}</style></head><body><div class="nota">${nota}</div><script>window.onload=function(){window.print();}<\\/script></body></html>`);
+    printWindow.document.close();
+  } catch (err) { toast('Nota gagal dimuat. Coba lagi.'); }
+}
 
 // ===== TRACK =====
 function openTrackModal() { document.getElementById('trackModal').classList.add('open'); }
