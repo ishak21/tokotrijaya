@@ -480,6 +480,7 @@ button{cursor:pointer;font-family:var(--font-b);border:none;outline:none}
           <button type="button" class="payment-opt" onclick="selectPayment('bank',this)">Transfer Bank</button>
           <button type="button" class="payment-opt" onclick="selectPayment('ewallet',this)">E-Wallet</button>
           <button type="button" class="payment-opt" onclick="selectPayment('cod',this)">COD</button>
+          <button type="button" class="payment-opt" onclick="selectPayment('cash',this)"><i class="fas fa-money-bill-wave"></i> Cash/Tunai</button>
           <button type="button" class="payment-opt" onclick="selectPayment('invoice',this)">Invoice (Bayar Nanti)</button>
         </div>
         <div class="bank-select" id="bankSelect"></div>
@@ -817,10 +818,14 @@ function selectPayment(type, btn) {
 // Couriers loaded from database
 let couriersData = [];
 
+function isRemovedCheckoutCourier(courier) {
+  return /(luar\s*kota|malang\s*kota)/i.test(String(courier.name || '').trim());
+}
+
 async function loadCouriersForCheckout() {
   try {
     const res = await fetch('/api/couriers');
-    couriersData = await res.json();
+    couriersData = (await res.json()).filter(c => !isRemovedCheckoutCourier(c));
     const shipEl = document.getElementById('shippingOptions');
     const ownDeliveryOption = `<button type="button" class="shipping-opt" onclick="selectShipping('Kirim oleh Toko',0,this)"><i class="fas fa-store"></i> Kirim oleh Toko - Gratis</button>`;
     if (couriersData.length > 0) {
