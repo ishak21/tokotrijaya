@@ -944,14 +944,25 @@ async function printCustomerNota() {
     if (!res.ok) throw new Error('invoice');
     const o = await res.json();
     const itemRows = o.items.map(i => `<tr><td>${notaEscape(i.product_name)}<br><small>${fmt(i.price)} × ${i.quantity}</small></td><td style="text-align:right;white-space:nowrap"><strong>${fmt(i.subtotal)}</strong></td></tr>`).join('');
+    const paymentLabels = { bank: 'Transfer Bank', ewallet: 'E-Wallet', cod: 'COD', invoice: 'Invoice (Tempo)', cash: 'Cash/Tunai' };
+    const paymentLabel = paymentLabels[o.payment_method] || o.payment_method || '-';
+    const paymentStatus = o.payment_method === 'cash' ? 'LUNAS' : (o.payment_status === 'lunas' ? 'LUNAS' : 'BELUM LUNAS');
     const nota = `<div style="text-align:center;margin-bottom:10px">${settings.logo ? `<img src="${notaEscape(settings.logo)}" style="max-height:50px;margin-bottom:6px">` : ''}<div style="font-size:18px;font-weight:800">${notaEscape(settings.site_name || 'Toko Tri Jaya')}</div><div style="font-size:11px;color:#333">${notaEscape(settings.address || '')}</div><div style="font-size:11px;color:#333">Telp/WA: ${notaEscape(settings.phone || '')}${settings.email ? ' • '+notaEscape(settings.email) : ''}</div></div>
       <div style="border-top:2px dashed #333;border-bottom:2px dashed #333;padding:8px 0;margin-bottom:8px;font-size:12px"><div style="display:flex;justify-content:space-between"><span><strong>NOTA</strong> ${notaEscape(o.invoice)}</span><span>${new Date(o.created_at).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'})}</span></div><div>Pelanggan: <strong>${notaEscape(o.customer_name)}</strong> (${notaEscape(o.customer_phone || '- ')})</div>${o.customer_address ? `<div>Alamat: ${notaEscape(o.customer_address)}${o.customer_city?', '+notaEscape(o.customer_city):''}</div>` : ''}</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${itemRows}</tbody></table>
-      <div style="border-top:1px dashed #333;margin-top:8px;padding-top:8px;font-size:12px"><div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>${+o.ppn_amount>0?`<div style="display:flex;justify-content:space-between"><span>PPN</span><span>${fmt(o.ppn_amount)}</span></div>`:''}<div style="display:flex;justify-content:space-between"><span>Ongkos Kirim${o.shipping_method?' ('+notaEscape(o.shipping_method)+')':''}</span><span>${fmt(o.shipping_cost)}</span></div><div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:1px dashed #333;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>${fmt(o.total)}</span></div><div style="display:flex;justify-content:space-between;margin-top:4px"><span>Metode Bayar</span><span>${notaEscape(o.payment_method || '-')} • ${o.payment_status==='lunas'?'LUNAS':'BELUM LUNAS'}</span></div></div>${o.notes?`<div style="font-size:11px;margin-top:8px"><strong>Catatan:</strong> ${notaEscape(o.notes)}</div>`:''}<div style="text-align:center;margin-top:14px;font-size:11px;color:#333;border-top:1px dashed #333;padding-top:8px">Terima kasih telah berbelanja<br>Barang yang sudah dibeli tidak dapat dikembalikan kecuali ada perjanjian.</div>`;
-    const printWindow = window.open('', '_blank', 'width=480,height=700');
-    if (!printWindow) return toast('Izinkan pop-up browser untuk mencetak nota');
-    printWindow.document.write(`<!doctype html><html><head><title>Nota ${notaEscape(o.invoice)}</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#111}.nota{max-width:420px;margin:0 auto;font-size:12px}.nota table td{border:none;padding:2px 0}@media print{@page{margin:12mm}}</style></head><body><div class="nota">${nota}</div><script>window.onload=function(){window.print();}<\\/script></body></html>`);
-    printWindow.document.close();
+      <div style="border-top:1px dashed #333;margin-top:8px;padding-top:8px;font-size:12px"><div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>${+o.ppn_amount>0?`<div style="display:flex;justify-content:space-between"><span>PPN</span><span>${fmt(o.ppn_amount)}</span></div>`:''}<div style="display:flex;justify-content:space-between"><span>Ongkos Kirim${o.shipping_method?' ('+notaEscape(o.shipping_method)+')':''}</span><span>${fmt(o.shipping_cost)}</span></div><div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:1px dashed #333;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>${fmt(o.total)}</span></div><div style="display:flex;justify-content:space-between;margin-top:4px"><span>Metode Bayar</span><span>${notaEscape(paymentLabel)} • ${paymentStatus}</span></div></div>${o.notes?`<div style="font-size:11px;margin-top:8px"><strong>Catatan:</strong> ${notaEscape(o.notes)}</div>`:''}<div style="text-align:center;margin-top:14px;font-size:11px;color:#333;border-top:1px dashed #333;padding-top:8px">Terima kasih telah berbelanja<br>Barang yang sudah dibeli tidak dapat dikembalikan kecuali ada perjanjian.</div>`;
+    let iframe = document.getElementById('__customerPrintFrame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = '__customerPrintFrame';
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+      document.body.appendChild(iframe);
+    }
+    iframe.onload = () => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
+      catch (e) { console.error('Gagal membuka dialog cetak:', e); toast('Gagal membuka dialog cetak. Coba lagi.'); }
+    };
+    iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Nota ${notaEscape(o.invoice)} - Toko Tri Jaya</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111;margin:0}.nota{max-width:420px;margin:0 auto;font-size:12px}.nota table td{border:none;padding:2px 0}@media print{.no-print{display:none}@page{margin:12mm}}</style></head><body><div class="nota">${nota}</div></body></html>`;
   } catch (err) { toast('Nota gagal dimuat. Coba lagi.'); }
 }
 

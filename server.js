@@ -687,10 +687,11 @@ app.post('/api/orders', (req, res) => {
     const total = subtotal + ppnAmt + (+shipping_cost||0);
     const inv = 'INV' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,6).toUpperCase();
 
-    // Metode yang statusnya baru "lunas" setelah dikonfirmasi admin secara manual
-    const payment_status = 'pending';
-    // COD sudah merupakan konfirmasi order; transfer/e-wallet menunggu verifikasi pembayaran.
-    const initial_status = payment_method === 'cod' ? 'confirmed' : 'pending';
+    // Cash/Tunai sudah dibayar saat checkout; COD sudah dikonfirmasi sebagai pesanan.
+    // Transfer/e-wallet/invoice tetap menunggu verifikasi admin.
+    const isCashPayment = payment_method === 'cash';
+    const payment_status = isCashPayment ? 'lunas' : 'pending';
+    const initial_status = (isCashPayment || payment_method === 'cod') ? 'confirmed' : 'pending';
 
     const insItem = db.prepare('INSERT INTO order_items (order_id,product_id,product_name,product_image,price,quantity,subtotal,cost_price) VALUES (?,?,?,?,?,?,?,?)');
     const updStock = db.prepare('UPDATE products SET stock=MAX(0,stock-?) WHERE id=?');
